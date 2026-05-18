@@ -27,7 +27,9 @@ MV3's three worlds are the trust boundaries, deliberately:
   nothing at rest.
 - **Content script** — **untrusted-adjacent.** Shares a process-adjacent
   context with a hostile page. Treated as compromised in the threat model:
-  it is given exactly one field value at fill time and nothing else, ever.
+  it never holds `K` or the index, and the worst a fully-compromised
+  content script can do is what the _page's own origin_ could already do —
+  see §3 invariant 2 and §5.
 
 Messages cross these boundaries through `lib/messaging.ts`. Every message
 is treated as attacker-controlled and validated on receipt — including
@@ -38,9 +40,12 @@ messages _from_ the content script, which a hostile page may influence.
 1. **`K` exists in exactly one place:** the service worker's memory. It is
    never sent over a message, never written to `storage`, never logged,
    never placed in a DOM.
-2. **The content script never receives `K`, the entry index, or any entry
-   it was not asked — by a user gesture — to fill.** It gets one resolved
-   string, for one field, at fill time.
+2. **The content script never receives `K` or the full entry index.**
+   After the user clicks the affordance (a gesture) it receives the
+   **origin-matched summaries** for this page — names / types / urls, no
+   secret — to render the picker; on a pick it receives that one entry's
+   requested field **values**. Nothing else, ever — no unmatched entry, no
+   unpicked entry's secret.
 3. **No plaintext secret at rest.** `chrome.storage` and IndexedDB hold
    only ciphertext, non-extractable `CryptoKey` handles, and non-secret
    settings. A decrypted entry is never persisted.

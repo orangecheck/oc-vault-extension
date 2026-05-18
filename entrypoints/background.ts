@@ -181,11 +181,26 @@ export default defineBackground(() => {
                 return settings;
 
             case 'match-page':
-                // Phase 2 (autofill) consumes this. Pure origin matching —
-                // no secret in the result, only metadata summaries.
+                // Autofill: the origin-matched subset only — metadata
+                // summaries, no secret (SECURITY.md §4).
                 return entries
                     .map((e) => toSummary(e, fieldsOf(e)))
                     .filter((s) => s.url && entryMatchesPage(s.url, message.pageUrl));
+
+            case 'fill-values': {
+                // Resolve the requested fields of ONE entry the user picked.
+                // Only those values, only that entry — never the key, never
+                // another entry (SECURITY.md §3, invariant 2).
+                const entry = entries.find((e) => e.id === message.entryId);
+                if (!entry) throw new Error('entry not found');
+                const all = fieldsOf(entry);
+                const values: Record<string, string> = {};
+                for (const name of message.fields) {
+                    const v = all[name];
+                    if (typeof v === 'string') values[name] = v;
+                }
+                return { values };
+            }
 
             default:
                 throw new Error('unknown message');

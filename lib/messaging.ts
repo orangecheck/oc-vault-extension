@@ -43,7 +43,13 @@ export type Message =
     | { kind: 'get-settings' }
     | { kind: 'set-settings'; settings: Settings }
     /** Content-script: which entries match this page (summaries only). */
-    | { kind: 'match-page'; pageUrl: string };
+    | { kind: 'match-page'; pageUrl: string }
+    /**
+     * Content-script: resolve the requested fields of ONE picked entry for
+     * a fill. The reply carries only those field values for that one
+     * entry — never the key, never another entry (SECURITY.md §3).
+     */
+    | { kind: 'fill-values'; entryId: string; fields: string[] };
 
 /** The worker's reply. `data` shape depends on the request `kind`. */
 export type Reply = { ok: true; data?: unknown } | { ok: false; reason: string };
@@ -60,6 +66,7 @@ export interface ReplyData {
     'get-settings': Settings;
     'set-settings': Settings;
     'match-page': VaultEntrySummary[];
+    'fill-values': { values: Record<string, string> };
 }
 
 /** Send a message to the worker and await its typed reply. */

@@ -29,7 +29,7 @@ security architecture — see `SECURITY.md` §2.
 | ----------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------- |
 | **background service worker** | extension origin, no DOM                | the unlocked vault key; the decrypted entry index; the lock timer                    | —                                                        |
 | **popup**                     | extension origin, its own document      | renders entries it requests from the worker; the unlock passphrase _in transit_ only | the key at rest                                          |
-| **content script**            | injected into web pages, isolated world | one resolved field value, at fill time, after a user gesture                         | the vault key; the entry index; any other entry's secret |
+| **content script**            | injected into web pages, isolated world | after a gesture: the origin-matched summaries, then one picked entry's field values  | the vault key; the full entry index; any unpicked secret |
 
 The vault key lives in **exactly one place: the service worker's memory.**
 The popup and content script ask the worker to act; they never receive the
@@ -106,10 +106,11 @@ is conservative by default.
   shadow-DOM element the page's script cannot read or drive; it reflects
   worker state, and the _click_ is a real user gesture the page cannot
   synthesize into a fill.
-- **One value, one field, one gesture.** The content script receives
-  exactly the value being filled, at the moment of filling. It is given
-  neither the entry list nor any other field. The worker resolves
-  "which entry, which field" behind the message boundary.
+- **Minimal disclosure, gated on a gesture.** Before the affordance is
+  clicked the content script knows nothing of the vault. On the click it
+  gets the origin-matched **summaries** (no secret) to render the picker;
+  on a pick, only that one entry's requested field **values**. Never the
+  full index, never an unpicked entry's secret (`SECURITY.md` §3).
 
 Phishing resistance falls out for free: origin-bound credentials are not
 offered on look-alike domains. This is a headline feature, not a footnote.
@@ -154,15 +155,18 @@ permission: the session cookie rides ordinary `fetch`.
 
 ## 9. Build plan
 
-- **Phase 0 — groundwork** _(this milestone)._ WXT + React + TS scaffold;
-  MV3 manifest (Phase-0 permissions); the three entrypoints stubbed; the
-  `lib/` modules with real signatures; the typed message bus; a dark popup
-  shell that renders the locked state. Repo, README, PLAN, SECURITY.
-- **Phase 1 — read-only vault.** Unlock against the escrow API; sync;
-  decrypt; the popup entry list with search, type filter, copy-to-clipboard
-  (with auto-clear), and reveal. Idle lock. Ciphertext caching.
-- **Phase 2 — autofill.** `forms.ts` detection; `origin.ts` matching; the
-  closed-shadow-DOM affordance; fill-on-gesture; the iframe rule.
+- **Phase 0 — groundwork** ✓ _done._ WXT + React + TS scaffold; MV3
+  manifest; the entrypoints; the `lib/` modules; the typed message bus; a
+  dark popup. Repo, README, PLAN, SECURITY.
+- **Phase 1 — read-only vault** ✓ _done._ Unlock against the escrow API;
+  sync; decrypt; the popup entry list with search, a type filter and a
+  detail/reveal view; the idle lock; the ciphertext cache. Remaining
+  polish: copy auto-clear.
+- **Phase 2 — autofill** ✓ _done._ `forms.ts` detection; `origin.ts`
+  matching; the closed-shadow-DOM affordance + picker; fill-on-gesture;
+  the per-frame iframe rule. The `fill-values` message resolves one
+  picked entry's fields. Remaining polish: registrable-domain matching
+  via the full PSL (currently the compact known-suffix set).
 - **Phase 3 — capture.** Detect new / changed credentials on submit;
   prompt; write blobs.
 - **Phase 4 — polish & ship.** Passkey unlock; the password generator;
