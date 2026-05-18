@@ -49,7 +49,26 @@ export type Message =
      * a fill. The reply carries only those field values for that one
      * entry — never the key, never another entry (SECURITY.md §3).
      */
-    | { kind: 'fill-values'; entryId: string; fields: string[] };
+    | { kind: 'fill-values'; entryId: string; fields: string[] }
+    /**
+     * Content-script: a login was just submitted — the user typed these
+     * values into the page's own fields. The worker decides whether they
+     * are new / changed and holds them as a pending capture (PLAN.md §6).
+     */
+    | { kind: 'capture-login'; url: string; username: string; password: string }
+    /** Content-script: is there a pending capture relevant to this page? */
+    | { kind: 'get-pending-capture'; pageUrl: string }
+    /** Write the pending capture to the vault. */
+    | { kind: 'commit-capture' }
+    /** Discard the pending capture. */
+    | { kind: 'dismiss-capture' };
+
+/** What the popup / content script needs to prompt about a capture. */
+export interface PendingCaptureInfo {
+    mode: 'new' | 'update';
+    host: string;
+    username: string;
+}
 
 /** The worker's reply. `data` shape depends on the request `kind`. */
 export type Reply = { ok: true; data?: unknown } | { ok: false; reason: string };
@@ -67,6 +86,10 @@ export interface ReplyData {
     'set-settings': Settings;
     'match-page': VaultEntrySummary[];
     'fill-values': { values: Record<string, string> };
+    'capture-login': { decision: 'none' | 'new' | 'update'; host: string; username: string };
+    'get-pending-capture': { pending: PendingCaptureInfo | null };
+    'commit-capture': { saved: boolean };
+    'dismiss-capture': Record<string, never>;
 }
 
 /** Send a message to the worker and await its typed reply. */

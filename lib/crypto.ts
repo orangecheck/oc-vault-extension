@@ -16,9 +16,19 @@
 
 import { scrypt } from '@noble/hashes/scrypt';
 
-import { aesGcmDecrypt, b64urlDecode, utf8Decode, utf8Encode } from '@orangecheck/lock-crypto';
+import {
+    aesGcmDecrypt,
+    aesGcmEncrypt,
+    b64urlDecode,
+    b64urlEncode,
+    hexEncode,
+    randomBytesN,
+    utf8Decode,
+    utf8Encode,
+} from '@orangecheck/lock-crypto';
 
 const VAULT_KEY_LEN = 32;
+const NONCE_LEN = 12;
 const BLOB_VERSION = 1;
 
 export type VaultEntryType =
@@ -148,4 +158,39 @@ export function toSummary(entry: VaultEntry, fields?: VaultEntryFields): VaultEn
 /** A live (non-trashed, non-tombstoned) entry — mirrors oc-vault-web. */
 export function isLiveEntry(entry: VaultEntry): boolean {
     return !entry.deleted_at && !entry.purged_at;
+}
+
+/* ── write path (Phase 3, capture) ──────────────────────────────────────
+   The inverse of the read path above, and likewise pinned byte-for-byte
+   to oc-vault-web. PLAN.md §10: extract a shared `@orangecheck/` package
+   now that BOTH directions are duplicated. */
+
+/** A fresh 32-hex entry id — 16 random bytes, hex-encoded. */
+export function generateEntryId(): string {
+    return hexEncode(randomBytesN(16));
+}
+
+/** Encrypt an entry's inner fields under the vault key. */
+export function encryptFields(
+    fields: VaultEntryFields,
+    key: Uint8Array
+): { nonce: string; ciphertext: string } {
+    const nonce = randomBytesN(NONCE_LEN);
+    const ct = aesGcmEncrypt(key, nonce, utf8Encode(JSON.stringify(fields)));
+    return { nonce: b64urlEncode(nonce), ciphertext: b64urlEncode(ct) };
+}
+
+/**
+ * Pack an entry into a cloud blob — the outer AES-GCM layer that keeps the
+ * server blind to entry names and types. The inverse of
+ * `unpackEntryFromCloud`.
+ */
+export function packEntryForCloud(entry: VaultEntry, key: Uint8Array): string {
+    const nonce = randomBytesN(NONCE_LEN);
+    const ct = aesGcmEncrypt(key, nonce, utf8Encode(JSON.stringify(entry)));
+    return JSON.stringify({
+        v: BLOB_VERSION,
+        blob_nonce: b64urlEncode(nonce),
+        blob_ct: b64urlEncode(ct),
+    });
 }

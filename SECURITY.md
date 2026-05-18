@@ -94,6 +94,12 @@ simply has no matching entry. Phishing resistance is structural.
 - **DOM scraping after fill** — once a value is in a field, page JS can
   read it; this is intrinsic to autofill. Mitigated by: fill only on
   gesture, only on matching origin, never into mismatched frames.
+- **Capture reads a password** — on a login submit the content script
+  reads the values the user just typed into the page's OWN fields and
+  sends them to the worker. The page already holds those values, so this
+  is no new exposure. The captured password is held only in the worker's
+  memory (the pending capture), never persisted, and is written to the
+  vault only on an explicit Save click.
 - **Service-worker / popup XSS** — no untrusted HTML is rendered; React
   with no `dangerouslySetInnerHTML`; entry names and field values are text
   nodes only. A strict extension CSP (`script-src 'self'`) blocks injected

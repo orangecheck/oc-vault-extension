@@ -167,8 +167,13 @@ permission: the session cookie rides ordinary `fetch`.
   the per-frame iframe rule. The `fill-values` message resolves one
   picked entry's fields. Remaining polish: registrable-domain matching
   via the full PSL (currently the compact known-suffix set).
-- **Phase 3 — capture.** Detect new / changed credentials on submit;
-  prompt; write blobs.
+- **Phase 3 — capture** ✓ _done._ On a login submit the content script
+  hands the typed values to the worker, which judges them new / changed
+  and holds an in-memory pending capture; a non-spoofable prompt (inline,
+  or on the page the navigation lands on) offers to save / update, and on
+  confirm the worker writes the blob. The pending capture holds a
+  password, so it is memory-only — never persisted. Known gap: forms with
+  no `<form>` element (a `<div>` + button) are not captured in v1.
 - **Phase 4 — polish & ship.** Passkey unlock; the password generator;
   settings (idle timeout, stay-unlocked); Firefox parity; store listing,
   icons, privacy disclosure; a reproducible-build note. Submit to the

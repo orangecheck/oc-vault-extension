@@ -13,7 +13,10 @@
 import { readBlobCache, writeBlobCache, type CachedBlob } from '@/lib/cache';
 import {
     decryptFields,
+    encryptFields,
+    generateEntryId,
     isLiveEntry,
+    packEntryForCloud,
     toSummary,
     unpackEntryFromCloud,
     unwrapVaultKey,
@@ -21,11 +24,24 @@ import {
     type VaultEntryFields,
 } from '@/lib/crypto';
 import { onMessage, type VaultState } from '@/lib/messaging';
-import { entryMatchesPage } from '@/lib/origin';
-import { fetchBlob, fetchEscrow, listBlobs, NotSignedIn } from '@/lib/sync';
+import { entryMatchesPage, matchEntryToPage } from '@/lib/origin';
+import { fetchBlob, fetchEscrow, listBlobs, NotSignedIn, putBlob } from '@/lib/sync';
 import { loadSettings, saveSettings, type Settings } from '@/lib/settings';
 
 const IDLE_ALARM = 'oc-idle-lock';
+const CAPTURE_TTL_MS = 2 * 60_000;
+
+/** A login the user just submitted, awaiting a save/update confirmation.
+ *  Holds a password → in-memory only, never persisted (SECURITY.md §3). */
+interface PendingCapture {
+    url: string;
+    host: string;
+    username: string;
+    password: string;
+    mode: 'new' | 'update';
+    entryId?: string;
+    at: number;
+}
 
 export default defineBackground(() => {
     /* ── in-memory session — never persisted (SECURITY.md §3) ──────────── */
@@ -33,6 +49,7 @@ export default defineBackground(() => {
     let entries: VaultEntry[] = [];
     let lastSyncAt: string | null = null;
     let settings: Settings | null = null;
+    let pendingCapture: PendingCapture | null = null;
 
     async function getSettings(): Promise<Settings> {
         if (!settings) settings = await loadSettings();
@@ -73,8 +90,50 @@ export default defineBackground(() => {
         key = null;
         entries = [];
         lastSyncAt = null;
+        pendingCapture = null;
         void browser.alarms.clear(IDLE_ALARM);
         return state('locked');
+    }
+
+    /* ── capture (PLAN.md §6) ───────────────────────────────────────────── */
+
+    /** Write the held pending capture to the vault as a new / updated entry. */
+    async function commitCapture(): Promise<void> {
+        if (!key) throw new Error('vault is locked');
+        const pc = pendingCapture;
+        if (!pc) throw new Error('nothing to save');
+        const now = new Date().toISOString();
+
+        if (pc.mode === 'update' && pc.entryId) {
+            const existing = entries.find((e) => e.id === pc.entryId);
+            if (!existing) throw new Error('the entry to update is gone — sync and retry');
+            const fields = decryptFields(existing, key);
+            fields.password = pc.password;
+            if (pc.username) fields.username = pc.username;
+            const sealed = encryptFields(fields, key);
+            const updated: VaultEntry = { ...existing, ...sealed, updated_at: now };
+            await putBlob(updated.id, packEntryForCloud(updated, key));
+            entries = entries.map((e) => (e.id === updated.id ? updated : e));
+        } else {
+            const id = generateEntryId();
+            const fields: VaultEntryFields = {
+                username: pc.username,
+                password: pc.password,
+                url: pc.url,
+            };
+            const sealed = encryptFields(fields, key);
+            const entry: VaultEntry = {
+                id,
+                type: 'password',
+                name: pc.host,
+                ...sealed,
+                created_at: now,
+                updated_at: now,
+            };
+            await putBlob(id, packEntryForCloud(entry, key));
+            entries = [...entries, entry];
+        }
+        pendingCapture = null;
     }
 
     /* ── sync ───────────────────────────────────────────────────────────── */
@@ -201,6 +260,75 @@ export default defineBackground(() => {
                 }
                 return { values };
             }
+
+            case 'capture-login': {
+                // The user typed these into the page's OWN fields — the page
+                // already holds them, so capturing is no new exposure
+                // (SECURITY.md §5). Locked → nothing to compare against.
+                if (!key || !message.password) {
+                    return { decision: 'none', host: '', username: '' };
+                }
+                let host = '';
+                try {
+                    host = new URL(message.url).hostname;
+                } catch {
+                    return { decision: 'none', host: '', username: '' };
+                }
+                let mode: 'new' | 'update' = 'new';
+                let entryId: string | undefined;
+                for (const entry of entries) {
+                    const f = decryptFields(entry, key);
+                    if (typeof f.url !== 'string' || !entryMatchesPage(f.url, message.url)) {
+                        continue;
+                    }
+                    const stored = typeof f.username === 'string' ? f.username : '';
+                    if (stored !== message.username) continue;
+                    if (f.password === message.password) {
+                        return { decision: 'none', host, username: message.username };
+                    }
+                    mode = 'update';
+                    entryId = entry.id;
+                    break;
+                }
+                pendingCapture = {
+                    url: message.url,
+                    host,
+                    username: message.username,
+                    password: message.password,
+                    mode,
+                    entryId,
+                    at: Date.now(),
+                };
+                return { decision: mode, host, username: message.username };
+            }
+
+            case 'get-pending-capture': {
+                if (!pendingCapture) return { pending: null };
+                if (Date.now() - pendingCapture.at > CAPTURE_TTL_MS) {
+                    pendingCapture = null;
+                    return { pending: null };
+                }
+                // Surface the prompt only on a page of the same registrable
+                // domain as the login — never on an unrelated site.
+                if (matchEntryToPage(pendingCapture.url, message.pageUrl) === 'none') {
+                    return { pending: null };
+                }
+                return {
+                    pending: {
+                        mode: pendingCapture.mode,
+                        host: pendingCapture.host,
+                        username: pendingCapture.username,
+                    },
+                };
+            }
+
+            case 'commit-capture':
+                await commitCapture();
+                return { saved: true };
+
+            case 'dismiss-capture':
+                pendingCapture = null;
+                return {};
 
             default:
                 throw new Error('unknown message');
