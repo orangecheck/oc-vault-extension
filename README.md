@@ -62,6 +62,9 @@ npm run dev:firefox
 npm run build      # production build → .output/
 ```
 
+[`TESTING.md`](./TESTING.md) is the click-by-click guide to loading the
+extension into a browser and exercising every feature.
+
 ## Layout
 
 ```
