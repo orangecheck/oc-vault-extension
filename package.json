@@ -1,0 +1,33 @@
+{
+    "name": "oc-vault-extension",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Browser extension companion to vault.ochk.io — unlock once, fill anywhere, trust the origin.",
+    "type": "module",
+    "scripts": {
+        "dev": "wxt",
+        "dev:firefox": "wxt -b firefox",
+        "build": "wxt build",
+        "build:firefox": "wxt build -b firefox",
+        "zip": "wxt zip",
+        "compile": "tsc --noEmit",
+        "postinstall": "wxt prepare",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "dependencies": {
+        "@noble/hashes": "^1.5.0",
+        "@orangecheck/lock-crypto": "^0.1.0",
+        "react": "19.1.0",
+        "react-dom": "19.1.0"
+    },
+    "devDependencies": {
+        "@types/chrome": "^0.0.287",
+        "@types/react": "^19.0.0",
+        "@types/react-dom": "^19.0.0",
+        "@wxt-dev/module-react": "^1.1.3",
+        "prettier": "^3.3.3",
+        "typescript": "^5",
+        "wxt": "^0.20.0"
+    }
+}

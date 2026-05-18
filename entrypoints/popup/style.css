@@ -1,0 +1,178 @@
+/* OC Vault popup — dark by default, the family voice. */
+
+:root {
+    --bg: #0a0a0a;
+    --panel: #141414;
+    --border: #262626;
+    --fg: #e5e5e5;
+    --muted: #8a8a8a;
+    --primary: #ea580c;
+    --danger: #ef4444;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+}
+
+body {
+    background: var(--bg);
+    color: var(--fg);
+}
+
+.popup {
+    width: 360px;
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+}
+
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+.brand {
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+.brand strong {
+    color: var(--primary);
+}
+
+.body {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.muted {
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.5;
+}
+
+.error {
+    color: var(--danger);
+    font-size: 11px;
+}
+
+.search,
+input[type='password'] {
+    width: 100%;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--fg);
+    padding: 8px 10px;
+    font: inherit;
+    font-size: 13px;
+    border-radius: 4px;
+}
+.search:focus,
+input:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.btn {
+    display: inline-block;
+    text-align: center;
+    text-decoration: none;
+    background: var(--primary);
+    color: #fff;
+    border: none;
+    padding: 9px 14px;
+    font: inherit;
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.link {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font: inherit;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.link:hover {
+    color: var(--fg);
+}
+
+.entries {
+    list-style: none;
+    padding: 0;
+    max-height: 360px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+}
+
+.entry {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 6px;
+    border-bottom: 1px solid var(--border);
+}
+
+.entry-main {
+    min-width: 0;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.entry-name {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.entry-type {
+    font-size: 9.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.copy {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font: inherit;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 5px 9px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.copy:hover {
+    color: var(--fg);
+    border-color: var(--primary);
+}
+
+form {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
