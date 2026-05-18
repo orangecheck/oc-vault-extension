@@ -39,8 +39,11 @@ that govern where the vault key and plaintext are allowed to exist.
 
 ## Status
 
-**Phase 0 — groundwork.** Repo, build, and the architecture skeleton. Not
-yet feature-complete; see [`PLAN.md`](./PLAN.md) for the phased plan.
+**Phases 0–3 done — feature-complete (`v0.1.0`).** Unlock, sync, browse,
+autofill, and capture all work; build is green for Chrome and Firefox.
+Remaining before a `1.0`: Phase 4 polish + store submission — see
+[`PLAN.md`](./PLAN.md) for the plan and [`PUBLISHING.md`](./PUBLISHING.md)
+for the release path.
 
 ## Stack
 

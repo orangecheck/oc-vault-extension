@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <!-- OC Vault mark — orange tile, white keyhole. The family primary is #ea580c. -->
+    <rect width="128" height="128" rx="28" fill="#ea580c" />
+    <circle cx="64" cy="54" r="19" fill="#ffffff" />
+    <path d="M55 67 L73 67 L80 101 L48 101 Z" fill="#ffffff" />
+</svg>

@@ -1,6 +1,6 @@
 {
     "name": "oc-vault-extension",
-    "version": "0.0.0",
+    "version": "0.1.0",
     "private": true,
     "description": "Browser extension companion to vault.ochk.io — unlock once, fill anywhere, trust the origin.",
     "type": "module",
