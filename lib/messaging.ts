@@ -9,7 +9,8 @@
  * inbound secret is a single resolved field value in `FillPayload`.
  */
 
-import type { VaultEntrySummary } from './crypto';
+import type { VaultEntryFields, VaultEntrySummary } from './crypto';
+import type { Settings } from './settings';
 
 /** The worker's lock state, safe to share with any surface. */
 export interface VaultState {
@@ -37,6 +38,10 @@ export type Message =
     | { kind: 'list-entries' }
     /** Popup-only: reveal one decrypted field of one entry. */
     | { kind: 'reveal-field'; entryId: string; field: string }
+    /** Popup-only: reveal every decrypted field of one entry (detail view). */
+    | { kind: 'reveal-entry'; entryId: string }
+    | { kind: 'get-settings' }
+    | { kind: 'set-settings'; settings: Settings }
     /** Content-script: which entries match this page (summaries only). */
     | { kind: 'match-page'; pageUrl: string };
 
@@ -51,6 +56,9 @@ export interface ReplyData {
     sync: VaultState;
     'list-entries': VaultEntrySummary[];
     'reveal-field': { value: string };
+    'reveal-entry': { fields: VaultEntryFields };
+    'get-settings': Settings;
+    'set-settings': Settings;
     'match-page': VaultEntrySummary[];
 }
 

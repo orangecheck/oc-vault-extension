@@ -14,7 +14,7 @@ export default defineConfig({
         name: 'OC Vault',
         description:
             'Unlock once, fill anywhere, trust the origin. The browser companion to vault.ochk.io.',
-        permissions: ['storage'],
+        permissions: ['storage', 'alarms'],
         host_permissions: ['https://vault.ochk.io/*', 'https://ochk.io/*'],
         // No remotely-loaded code; the popup runs only its own bundle.
         content_security_policy: {
