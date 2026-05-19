@@ -182,6 +182,13 @@ form {
     gap: 12px;
 }
 
+.empty {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 6px 2px 2px;
+}
+
 .entry-clickable {
     cursor: pointer;
 }

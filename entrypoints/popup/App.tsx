@@ -43,12 +43,18 @@ export function App() {
             try {
                 const s = await send({ kind: 'get-state' });
                 setState(s);
-                if (s.status === 'unlocked') await loadEntries();
+                if (s.status === 'unlocked') {
+                    await loadEntries();
+                    // Refresh from the server — surfaces a sync error (e.g.
+                    // cloud sync not enabled) the cached state would hide.
+                    void refresh();
+                }
             } catch (err) {
                 setError(err instanceof Error ? err.message : 'could not reach the vault');
             }
         })();
-    }, [loadEntries]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     /** Unlock paints from the ciphertext cache; this refreshes from the server. */
     const refresh = useCallback(async () => {
@@ -232,8 +238,37 @@ export function App() {
                         </button>
                     </li>
                 ))}
-                {filtered.length === 0 && <li className="muted">no matching entries</li>}
+                {filtered.length === 0 && entries.length > 0 && (
+                    <li className="muted">no entries match your search</li>
+                )}
             </ul>
+            {entries.length === 0 && (
+                <div className="empty">
+                    {error ? (
+                        <p className="muted">Couldn&apos;t load your vault: {error}</p>
+                    ) : (
+                        <>
+                            <p className="muted">
+                                Your vault has no <strong>cloud-synced</strong> entries.
+                            </p>
+                            <p className="muted">
+                                OC Vault fills credentials that are synced to your OrangeCheck
+                                account. If your entries live only in the web app on one device,
+                                turn on cloud sync at vault.ochk.io — then they appear here, and
+                                autofill works.
+                            </p>
+                            <a
+                                className="btn"
+                                href="https://vault.ochk.io"
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                open vault.ochk.io
+                            </a>
+                        </>
+                    )}
+                </div>
+            )}
         </Shell>
     );
 }

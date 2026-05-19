@@ -130,13 +130,21 @@ export default defineContentScript({
 
             try {
                 const state = await send({ kind: 'get-state' });
+                panel.lastElementChild?.remove();
                 if (state.status !== 'unlocked') {
-                    panel.lastElementChild?.remove();
                     message(panel, 'OC Vault is locked — open the OC toolbar icon to unlock it.');
                     return;
                 }
+                if (state.entryCount === 0) {
+                    // Unlocked, but the vault has no synced entries — almost
+                    // always cloud sync not enabled. Point at the popup.
+                    message(
+                        panel,
+                        'No synced entries in your vault. Open the OC toolbar icon — if it asks you to enable cloud sync, autofill needs that.'
+                    );
+                    return;
+                }
                 const matches = await send({ kind: 'match-page', pageUrl: location.href });
-                panel.lastElementChild?.remove();
                 renderMatches(panel, matches, form);
             } catch {
                 panel.lastElementChild?.remove();
