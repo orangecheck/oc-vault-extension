@@ -290,6 +290,13 @@ export function App() {
                     </div>
                 </div>
             )}
+            {!settings.browserPmNoticeDismissed && (
+                <BrowserPmNotice
+                    onDismiss={() =>
+                        void updateSettings({ ...settings, browserPmNoticeDismissed: true })
+                    }
+                />
+            )}
             <input
                 className="search"
                 value={query}
@@ -383,6 +390,40 @@ export function App() {
                 <p className="who-line">signed in · {shortDid(state.identity)}</p>
             )}
         </Shell>
+    );
+}
+
+/** This browser's settings URL — Edge uses its own scheme. */
+function browserSettingsUrl(): string {
+    return /\bEdg\//.test(navigator.userAgent) ? 'edge://settings/' : 'chrome://settings/';
+}
+
+/**
+ * One-time notice: a browser's built-in password manager pops its own
+ * autofill menu, colliding with OC Vault's. No extension API can suppress
+ * the native menu — so, as 1Password and Bitwarden do, we guide the user
+ * to turn it off. (Or they can flip off the focus menu in settings.)
+ */
+function BrowserPmNotice({ onDismiss }: { onDismiss: () => void }) {
+    return (
+        <div className="notice">
+            <p>
+                <strong>Seeing two autofill menus?</strong> Your browser has its own password
+                manager. Turn it off — in Settings → Autofill / Passwords, switch off “offer to save
+                passwords” — so only OC Vault offers to fill.
+            </p>
+            <div className="capture-actions">
+                <button
+                    className="btn"
+                    onClick={() => void browser.tabs.create({ url: browserSettingsUrl() })}
+                >
+                    open browser settings
+                </button>
+                <button className="link" onClick={onDismiss}>
+                    got it
+                </button>
+            </div>
+        </div>
     );
 }
 
@@ -555,6 +596,18 @@ function SettingsView({
                 />
             </div>
             <div className="setting">
+                <span>open the autofill menu on field focus</span>
+                <Toggle
+                    on={settings.autofillMenuOnFocus}
+                    onClick={() =>
+                        onChange({
+                            ...settings,
+                            autofillMenuOnFocus: !settings.autofillMenuOnFocus,
+                        })
+                    }
+                />
+            </div>
+            <div className="setting">
                 <span>clear the clipboard after copy</span>
                 <select
                     value={settings.clipboardClearSeconds}
@@ -569,6 +622,11 @@ function SettingsView({
                     ))}
                 </select>
             </div>
+            <p className="muted">
+                Turn the focus menu off if you keep your browser&apos;s built-in password manager —
+                OC Vault&apos;s menu then opens only when you click its mark, so the two never both
+                pop up.
+            </p>
             <p className="muted">
                 The vault locks whenever the browser suspends the extension; your key is held only
                 in memory, never written to disk.

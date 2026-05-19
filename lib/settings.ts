@@ -10,15 +10,27 @@ export interface Settings {
     captureEnabled: boolean;
     /** Show the inline autofill mark on recognised login fields. */
     showFieldIcon: boolean;
+    /**
+     * Drop the autofill menu open automatically when a login field is
+     * focused. When false, the menu opens only on clicking the OC mark —
+     * useful for anyone keeping their browser's built-in password manager,
+     * so the two menus never both pop at once.
+     */
+    autofillMenuOnFocus: boolean;
     /** Clear the clipboard this many seconds after a copy. 0 = never. */
     clipboardClearSeconds: number;
+    /** The user has dismissed the "turn off the browser password manager"
+     *  notice — shown once, since the two autofill menus otherwise collide. */
+    browserPmNoticeDismissed: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
     idleLockMinutes: 15,
     captureEnabled: true,
     showFieldIcon: true,
+    autofillMenuOnFocus: true,
     clipboardClearSeconds: 30,
+    browserPmNoticeDismissed: false,
 };
 
 /** Selectable idle-lock durations, in minutes; 0 = never. */
@@ -45,10 +57,18 @@ export async function loadSettings(): Promise<Settings> {
             typeof raw.showFieldIcon === 'boolean'
                 ? raw.showFieldIcon
                 : DEFAULT_SETTINGS.showFieldIcon,
+        autofillMenuOnFocus:
+            typeof raw.autofillMenuOnFocus === 'boolean'
+                ? raw.autofillMenuOnFocus
+                : DEFAULT_SETTINGS.autofillMenuOnFocus,
         clipboardClearSeconds:
             typeof raw.clipboardClearSeconds === 'number'
                 ? raw.clipboardClearSeconds
                 : DEFAULT_SETTINGS.clipboardClearSeconds,
+        browserPmNoticeDismissed:
+            typeof raw.browserPmNoticeDismissed === 'boolean'
+                ? raw.browserPmNoticeDismissed
+                : DEFAULT_SETTINGS.browserPmNoticeDismissed,
     };
 }
 

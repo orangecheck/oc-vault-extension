@@ -26,12 +26,15 @@ export default defineContentScript({
         if (typeof document === 'undefined') return;
 
         // Settings — fetched once. `showFieldIcon` is the master switch for
-        // all on-field UI (the mark AND the auto-dropdown).
+        // all on-field UI; `menuOnFocus` decides whether the dropdown opens
+        // on focus or only on a click of the OC mark.
         let fieldUiEnabled = true;
+        let menuOnFocus = true;
         let captureEnabled = true;
         void send({ kind: 'get-settings' })
             .then((s) => {
                 fieldUiEnabled = s.showFieldIcon;
+                menuOnFocus = s.autofillMenuOnFocus;
                 captureEnabled = s.captureEnabled;
             })
             .catch(() => undefined);
@@ -278,6 +281,28 @@ export default defineContentScript({
             return host;
         }
 
+        const MARK = 22;
+
+        /**
+         * Find where, inside the field's right edge, the field is actually
+         * clear. Sites (and some browsers) put their own control there — a
+         * reveal-password eye, a clear-X. Walking inward with
+         * `elementFromPoint` finds any such control so the OC mark is placed
+         * just to its LEFT, never stacked on top of it.
+         */
+        function freeRightEdge(field: HTMLInputElement, r: DOMRect): number {
+            const midY = r.top + r.height / 2;
+            const limit = Math.min(r.width - 10, 132);
+            for (let inset = 7; inset <= limit; inset += 4) {
+                const el = document.elementFromPoint(r.right - inset, midY);
+                // The field itself, our own mark, or nothing → clear here.
+                if (!el || el === field || el === affordance || el === picker) {
+                    return r.right - inset;
+                }
+            }
+            return r.right - 7;
+        }
+
         function placeAffordance(field: HTMLInputElement): void {
             const host = ensureAffordance();
             const r = field.getBoundingClientRect();
@@ -285,9 +310,10 @@ export default defineContentScript({
                 host.style.display = 'none';
                 return;
             }
+            const rightEdge = freeRightEdge(field, r);
             host.style.display = '';
-            host.style.left = `${r.right - 27}px`;
-            host.style.top = `${r.top + (r.height - 22) / 2}px`;
+            host.style.left = `${Math.max(r.left + 4, rightEdge - MARK)}px`;
+            host.style.top = `${r.top + (r.height - MARK) / 2}px`;
         }
 
         /** Focus landed on a recognised login field. */
@@ -300,8 +326,9 @@ export default defineContentScript({
             affordanceField = field;
             placeAffordance(field);
             // Drop the suggestion list automatically when this site has a
-            // match — the discoverable, password-manager-standard behaviour.
-            void openPicker(form, field, { auto: true });
+            // match — unless the user keeps their browser's own password
+            // manager and chose click-to-open, so the two never collide.
+            if (menuOnFocus) void openPicker(form, field, { auto: true });
         }
 
         function hideAffordanceSoon(): void {
