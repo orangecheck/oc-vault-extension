@@ -68,6 +68,21 @@ account, never a personal one.
 Review for an extension with `<all_urls>` + autofill typically takes a
 few days and may ask for a justification — §5 covers it.
 
+**Reach.** A Chrome Web Store listing installs natively on every major
+Chromium browser — **Brave, Arc, Vivaldi, Opera**, and any other
+CWS-compatible Chromium fork — without a second submission. Brave in
+particular fetches and installs CWS extensions seamlessly; there is no
+Brave extension store to mirror to. The CWS listing is the canonical
+install path for ~85% of desktop users.
+
+**Edge Add-ons (optional, recommended).** Microsoft Edge users _can_
+install from the Chrome Web Store but Edge nudges them toward its own
+store with a warning banner. A separate submission at
+<https://partner.microsoft.com/dashboard/microsoftedge/overview> uses
+the **same `-chrome.zip`** artifact; the account is free, review is
+usually 24–48 h. Reuse the §4 listing copy verbatim (Edge accepts the
+same description and screenshots).
+
 ## 3. Firefox Add-ons (AMO)
 
 **Account.** A free Mozilla account at <https://addons.mozilla.org>.
@@ -82,31 +97,92 @@ few days and may ask for a justification — §5 covers it.
 3. Fill the listing (the §4 copy applies).
 4. Submit; AMO review is usually faster than CWS.
 
-## 4. Store listing copy
+## 4. Store listing copy — paste-ready
 
-**Name:** `OC Vault`
+The same copy works across Chrome Web Store, Edge Add-ons, and Firefox AMO;
+each store's character limits and required fields are called out below.
+**Copy these verbatim** at submission time.
 
-**Summary** (≤132 chars):
+### Name (CWS ≤45 · Edge ≤50 · AMO ≤50)
 
-> Unlock your OrangeCheck vault in the browser — origin-bound autofill, end-to-end encrypted, no custody.
+```
+OC Vault
+```
 
-**Category:** Productivity
+### Short description / summary (CWS ≤132 · Edge ≤132 · AMO ≤250)
 
-**Description:**
+```
+End-to-end encrypted password manager. Origin-bound autofill, no custody, no telemetry. Pairs with vault.ochk.io.
+```
 
-> OC Vault is the browser companion to vault.ochk.io — the Bitcoin-identity password manager.
->
-> Unlock your vault once and it is there in every tab: browse and copy your entries from the toolbar popup, and autofill saved logins on the sites they belong to.
->
-> • End-to-end encrypted. Your vault key is derived from your passphrase and never leaves your browser's memory. OrangeCheck stores ciphertext only — it cannot read your vault.
-> • Origin-bound autofill. A credential is offered only on the exact site it was saved on, so look-alike phishing domains simply get nothing.
-> • Capture as you go. Log in somewhere new and OC Vault offers to save it.
-> • Locks itself. The vault re-locks when idle and whenever the browser suspends the extension.
-> • No account here, no second vault. It is the same vault as vault.ochk.io — set up, billing and recovery live there.
->
-> No analytics. No telemetry. No remote code. The extension talks only to your own vault.ochk.io account.
+### Long description (CWS ≤16 000 · Edge ≤10 000 · AMO ≤15 000)
 
-**Support / homepage:** `https://vault.ochk.io`
+```
+OC Vault is the browser companion to vault.ochk.io — a password manager
+that physically cannot read your data.
+
+Unlock your vault once and it is there in every tab: browse and copy your
+entries from the toolbar popup, and autofill saved logins on the sites
+they belong to.
+
+• End-to-end encrypted. Your vault key is derived from your passphrase
+  and never leaves your browser's memory. OrangeCheck stores ciphertext
+  only — it cannot decrypt your vault.
+• Origin-bound autofill. A credential is offered only on the exact site
+  it was saved on, so look-alike phishing domains simply get nothing.
+• Capture as you go. Log in somewhere new and OC Vault offers to save
+  it; an unchanged password is never re-prompted.
+• Live TOTP. Authenticator codes rotate in the popup and copy with one
+  click.
+• Locks itself. The vault re-locks when idle and whenever the browser
+  suspends the extension. The key never touches disk.
+• No account here, no second vault. The same vault as vault.ochk.io —
+  set up, billing, and recovery live there. Sign in with your Bitcoin
+  wallet (BIP-322) or with email-OTP.
+
+No analytics. No telemetry. No remote code. The extension talks only to
+your own vault.ochk.io account; OrangeCheck only ever serves ciphertext.
+
+Open source, MIT licensed. Reproducible build. Audited crypto: AES-256-GCM
+under a scrypt-derived (N=2^17) key.
+
+Learn more — https://docs.ochk.io/vault/extension
+Source     — https://github.com/orangecheck/oc-vault-extension
+Privacy    — https://ochk.io/privacy
+```
+
+### Category
+
+| Store            | Category                         |
+| ---------------- | -------------------------------- |
+| Chrome Web Store | **Productivity**                 |
+| Edge Add-ons     | **Productivity** (sub: Security) |
+| Firefox AMO      | **Privacy & Security**           |
+
+### Search terms / keywords (CWS allows 5; AMO uses a 50-char-each tag list)
+
+```
+password manager, autofill, bitcoin, end-to-end encryption, zero-knowledge
+```
+
+### Required URLs
+
+| Field          | Value                        |
+| -------------- | ---------------------------- |
+| Homepage       | `https://vault.ochk.io`      |
+| Support        | `https://docs.ochk.io/vault` |
+| Privacy policy | `https://ochk.io/privacy`    |
+| Source (AMO)   | upload `-sources.zip` per §3 |
+
+### Visual assets
+
+| Asset                         | Size / format                        | Notes                                                                          |
+| ----------------------------- | ------------------------------------ | ------------------------------------------------------------------------------ |
+| **Screenshots** (≥1, ≤5)      | 1280×800 or 640×400, PNG             | The popup entry list; the in-field OC mark on a login form; the unlock screen. |
+| Small promo tile (CWS opt.)   | 440×280, PNG                         | Orange tile + keyhole; reuse the toolbar icon scaled up.                       |
+| Marquee promo tile (CWS opt.) | 1400×560, PNG                        | Same brand; required only if featured. Skippable for v1.                       |
+| AMO icon                      | 128×128, PNG (`public/icon/128.png`) | Already in the repo.                                                           |
+| AMO header image (optional)   | 1680×340, PNG                        | Skippable for v1.                                                              |
 
 ## 5. Privacy practices — pre-written answers
 
