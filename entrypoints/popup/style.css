@@ -14,6 +14,23 @@
 * {
     box-sizing: border-box;
     margin: 0;
+    scrollbar-width: thin;
+    scrollbar-color: #333 transparent;
+}
+
+::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+}
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+::-webkit-scrollbar-thumb {
+    background: #2f2f2f;
+    border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+    background: #404040;
 }
 
 body {
@@ -307,4 +324,63 @@ select {
 select:focus {
     outline: none;
     border-color: var(--primary);
+}
+
+.link.danger {
+    color: var(--danger);
+}
+.link.danger:hover {
+    color: var(--danger);
+}
+
+/* on / off toggle */
+.toggle {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font: inherit;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.toggle-on {
+    border-color: var(--primary);
+    background: rgba(234, 88, 12, 0.15);
+    color: var(--primary);
+}
+
+/* capture save banner — top of the entry list */
+.capture-banner {
+    border: 1px solid var(--primary);
+    background: rgba(234, 88, 12, 0.1);
+    border-radius: 6px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.capture-banner p {
+    font-size: 12px;
+    line-height: 1.5;
+}
+.capture-banner strong {
+    color: var(--primary);
+}
+.capture-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.capture-actions .btn {
+    padding: 6px 12px;
+}
+
+/* the idle-timeout row on the unlock screen */
+.setting-inline {
+    margin-top: 2px;
+    font-size: 11px;
+    color: var(--muted);
 }

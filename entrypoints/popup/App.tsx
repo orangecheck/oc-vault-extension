@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { VaultEntryFields, VaultEntrySummary, VaultEntryType } from '@/lib/crypto';
-import { send, type VaultState } from '@/lib/messaging';
-import { DEFAULT_SETTINGS, IDLE_LOCK_CHOICES, type Settings } from '@/lib/settings';
+import { send, type PendingCaptureInfo, type VaultState } from '@/lib/messaging';
+import {
+    CLIPBOARD_CLEAR_CHOICES,
+    DEFAULT_SETTINGS,
+    IDLE_LOCK_CHOICES,
+    type Settings,
+} from '@/lib/settings';
 
 /** The decrypted field to copy for each entry type — the "primary" secret. */
 const PRIMARY_FIELD: Record<VaultEntryType, string> = {
@@ -29,9 +34,27 @@ function shortDid(did: string): string {
     return did.length > 26 ? `${did.slice(0, 16)}…${did.slice(-6)}` : did;
 }
 
+/** Copy to the clipboard, then clear it after `clearSeconds` (best-effort —
+ *  the timer only fires while the popup is open). 0 = never clear. */
+async function copyWithClear(value: string, clearSeconds: number): Promise<void> {
+    await navigator.clipboard.writeText(value);
+    if (clearSeconds > 0) {
+        setTimeout(
+            () => void navigator.clipboard.writeText('').catch(() => undefined),
+            clearSeconds * 1000
+        );
+    }
+}
+
+function idleLabel(m: number): string {
+    return m === 0 ? 'never' : `${m} min`;
+}
+
 export function App() {
     const [state, setState] = useState<VaultState | null>(null);
     const [entries, setEntries] = useState<VaultEntrySummary[]>([]);
+    const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+    const [pending, setPending] = useState<PendingCaptureInfo | null>(null);
     const [view, setView] = useState<View>('list');
     const [detailId, setDetailId] = useState<string | null>(null);
     const [query, setQuery] = useState('');
@@ -39,30 +62,13 @@ export function App() {
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [syncing, setSyncing] = useState(false);
+    const [confirmingLock, setConfirmingLock] = useState(false);
 
     const loadEntries = useCallback(async () => {
         setEntries(await send({ kind: 'list-entries' }));
     }, []);
 
-    useEffect(() => {
-        void (async () => {
-            try {
-                const s = await send({ kind: 'get-state' });
-                setState(s);
-                if (s.status === 'unlocked') {
-                    await loadEntries();
-                    // Refresh from the server — surfaces a sync error (e.g.
-                    // cloud sync not enabled) the cached state would hide.
-                    void refresh();
-                }
-            } catch (err) {
-                setError(err instanceof Error ? err.message : 'could not reach the vault');
-            }
-        })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
-
-    /** Sync runs automatically — on open, and after a capture. No button. */
+    /** Sync runs automatically — on open and after a capture. No button. */
     const refresh = useCallback(async () => {
         setSyncing(true);
         try {
@@ -76,6 +82,44 @@ export function App() {
             setSyncing(false);
         }
     }, [loadEntries]);
+
+    const checkPending = useCallback(async () => {
+        try {
+            const { pending: p } = await send({ kind: 'get-pending-capture' });
+            setPending(p);
+        } catch {
+            // best-effort
+        }
+    }, []);
+
+    useEffect(() => {
+        void (async () => {
+            try {
+                void send({ kind: 'get-settings' })
+                    .then(setSettings)
+                    .catch(() => undefined);
+                const s = await send({ kind: 'get-state' });
+                setState(s);
+                if (s.status === 'unlocked') {
+                    await loadEntries();
+                    void checkPending();
+                    void refresh();
+                }
+            } catch (err) {
+                setError(err instanceof Error ? err.message : 'could not reach the vault');
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    const updateSettings = useCallback(async (next: Settings) => {
+        setSettings(next);
+        try {
+            await send({ kind: 'set-settings', settings: next });
+        } catch {
+            // best-effort
+        }
+    }, []);
 
     const types = useMemo(() => {
         const seen = new Set<VaultEntryType>();
@@ -107,7 +151,7 @@ export function App() {
     if (state.status === 'signed-out') {
         return (
             <Shell>
-                <p className="muted">Sign in with your Bitcoin identity to open your vault.</p>
+                <p className="muted">Sign in with your OrangeCheck identity to open your vault.</p>
                 <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
                     sign in at ochk.io
                 </a>
@@ -122,14 +166,17 @@ export function App() {
                     identity={state.identity}
                     busy={busy}
                     error={error}
+                    settings={settings}
+                    onIdleChange={(m) => void updateSettings({ ...settings, idleLockMinutes: m })}
                     onUnlock={async (passphrase) => {
                         setBusy(true);
                         setError(null);
                         try {
                             const s = await send({ kind: 'unlock', passphrase });
                             setState(s);
-                            await loadEntries(); // instant — from the cache
-                            void refresh(); // then catch up with the server
+                            await loadEntries();
+                            void checkPending();
+                            void refresh();
                         } catch (err) {
                             setError(err instanceof Error ? err.message : 'could not unlock');
                         } finally {
@@ -141,18 +188,20 @@ export function App() {
         );
     }
 
-    const lock = async () => {
+    const doLock = async () => {
         await send({ kind: 'lock' });
         setState({ status: 'locked', entryCount: 0, lastSyncAt: null, identity: state.identity });
         setEntries([]);
+        setPending(null);
         setView('list');
         setDetailId(null);
+        setConfirmingLock(false);
     };
 
     if (view === 'settings') {
         return (
             <Shell header={<BackButton onBack={() => setView('list')} />}>
-                <SettingsView onError={setError} />
+                <SettingsView settings={settings} onChange={updateSettings} />
                 {error && <p className="error">{error}</p>}
             </Shell>
         );
@@ -163,7 +212,11 @@ export function App() {
         return (
             <Shell header={<BackButton onBack={() => setView('list')} />}>
                 {summary ? (
-                    <EntryDetail summary={summary} onError={setError} />
+                    <EntryDetail
+                        summary={summary}
+                        clearSeconds={settings.clipboardClearSeconds}
+                        onError={setError}
+                    />
                 ) : (
                     <p className="muted">entry not found</p>
                 )}
@@ -180,12 +233,57 @@ export function App() {
                     <button className="link" onClick={() => setView('settings')}>
                         settings
                     </button>
-                    <button className="link" onClick={() => void lock()}>
-                        lock
-                    </button>
+                    {confirmingLock ? (
+                        <>
+                            <button className="link danger" onClick={() => void doLock()}>
+                                lock?
+                            </button>
+                            <button className="link" onClick={() => setConfirmingLock(false)}>
+                                cancel
+                            </button>
+                        </>
+                    ) : (
+                        <button className="link" onClick={() => setConfirmingLock(true)}>
+                            lock
+                        </button>
+                    )}
                 </div>
             }
         >
+            {pending && (
+                <div className="capture-banner">
+                    <p>
+                        {pending.mode === 'update' ? 'Update' : 'Save'} the login for{' '}
+                        <strong>{pending.host}</strong>
+                        {pending.username ? ` · ${pending.username}` : ''}?
+                    </p>
+                    <div className="capture-actions">
+                        <button
+                            className="btn"
+                            onClick={async () => {
+                                try {
+                                    await send({ kind: 'commit-capture' });
+                                    setPending(null);
+                                    void refresh();
+                                } catch (err) {
+                                    setError(err instanceof Error ? err.message : 'could not save');
+                                }
+                            }}
+                        >
+                            {pending.mode === 'update' ? 'update' : 'save'}
+                        </button>
+                        <button
+                            className="link"
+                            onClick={async () => {
+                                await send({ kind: 'dismiss-capture' }).catch(() => undefined);
+                                setPending(null);
+                            }}
+                        >
+                            dismiss
+                        </button>
+                    </div>
+                </div>
+            )}
             <input
                 className="search"
                 value={query}
@@ -236,7 +334,7 @@ export function App() {
                                         entryId: entry.id,
                                         field: PRIMARY_FIELD[entry.type],
                                     });
-                                    await navigator.clipboard.writeText(value);
+                                    await copyWithClear(value, settings.clipboardClearSeconds);
                                     setError(null);
                                 } catch {
                                     setError('could not copy that entry');
@@ -307,11 +405,27 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
     );
 }
 
+function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            role="switch"
+            aria-checked={on}
+            className={on ? 'toggle toggle-on' : 'toggle'}
+            onClick={onClick}
+        >
+            {on ? 'on' : 'off'}
+        </button>
+    );
+}
+
 function EntryDetail({
     summary,
+    clearSeconds,
     onError,
 }: {
     summary: VaultEntrySummary;
+    clearSeconds: number;
     onError: (message: string | null) => void;
 }) {
     const [fields, setFields] = useState<VaultEntryFields | null>(null);
@@ -372,7 +486,7 @@ function EntryDetail({
                                 <button
                                     className="copy"
                                     onClick={async () => {
-                                        await navigator.clipboard.writeText(value);
+                                        await copyWithClear(value, clearSeconds);
                                         onError(null);
                                     }}
                                 >
@@ -387,43 +501,66 @@ function EntryDetail({
     );
 }
 
-function SettingsView({ onError }: { onError: (message: string | null) => void }) {
-    const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
-
-    useEffect(() => {
-        void send({ kind: 'get-settings' })
-            .then(setSettings)
-            .catch(() => undefined);
-    }, []);
-
-    const update = async (next: Settings) => {
-        setSettings(next);
-        try {
-            await send({ kind: 'set-settings', settings: next });
-            onError(null);
-        } catch (err) {
-            onError(err instanceof Error ? err.message : 'could not save settings');
-        }
-    };
-
+function SettingsView({
+    settings,
+    onChange,
+}: {
+    settings: Settings;
+    onChange: (next: Settings) => void;
+}) {
     return (
         <div className="settings">
-            <label className="setting">
+            <div className="setting">
                 <span>auto-lock when idle</span>
                 <select
                     value={settings.idleLockMinutes}
-                    onChange={(e) => void update({ idleLockMinutes: Number(e.target.value) })}
+                    onChange={(e) =>
+                        onChange({ ...settings, idleLockMinutes: Number(e.target.value) })
+                    }
                 >
                     {IDLE_LOCK_CHOICES.map((m) => (
                         <option key={m} value={m}>
-                            {m === 0 ? 'never' : `${m} min`}
+                            {idleLabel(m)}
                         </option>
                     ))}
                 </select>
-            </label>
+            </div>
+            <div className="setting">
+                <span>offer to save new logins</span>
+                <Toggle
+                    on={settings.captureEnabled}
+                    onClick={() =>
+                        onChange({ ...settings, captureEnabled: !settings.captureEnabled })
+                    }
+                />
+            </div>
+            <div className="setting">
+                <span>show the autofill icon on fields</span>
+                <Toggle
+                    on={settings.showFieldIcon}
+                    onClick={() =>
+                        onChange({ ...settings, showFieldIcon: !settings.showFieldIcon })
+                    }
+                />
+            </div>
+            <div className="setting">
+                <span>clear the clipboard after copy</span>
+                <select
+                    value={settings.clipboardClearSeconds}
+                    onChange={(e) =>
+                        onChange({ ...settings, clipboardClearSeconds: Number(e.target.value) })
+                    }
+                >
+                    {CLIPBOARD_CLEAR_CHOICES.map((s) => (
+                        <option key={s} value={s}>
+                            {s === 0 ? 'never' : `${s}s`}
+                        </option>
+                    ))}
+                </select>
+            </div>
             <p className="muted">
-                The vault also locks whenever the browser suspends the extension — your key is held
-                only in memory, never stored.
+                The vault locks whenever the browser suspends the extension; your key is held only
+                in memory, never written to disk.
             </p>
         </div>
     );
@@ -433,11 +570,15 @@ function UnlockGate({
     identity,
     busy,
     error,
+    settings,
+    onIdleChange,
     onUnlock,
 }: {
     identity: string | null;
     busy: boolean;
     error: string | null;
+    settings: Settings;
+    onIdleChange: (minutes: number) => void;
     onUnlock: (passphrase: string) => void;
 }) {
     const [passphrase, setPassphrase] = useState('');
@@ -448,7 +589,10 @@ function UnlockGate({
                 if (passphrase) onUnlock(passphrase);
             }}
         >
-            <p className="muted">Enter your vault passphrase to unlock.</p>
+            <p className="muted">
+                Enter your vault passphrase. Being signed in lets the extension fetch your encrypted
+                vault; the passphrase decrypts it — OrangeCheck never can.
+            </p>
             {identity && <p className="who-line">unlocking · {shortDid(identity)}</p>}
             <input
                 className="search"
@@ -463,6 +607,19 @@ function UnlockGate({
             <button className="btn" type="submit" disabled={busy || !passphrase}>
                 {busy ? 'unlocking…' : 'unlock'}
             </button>
+            <div className="setting setting-inline">
+                <span>stay unlocked for</span>
+                <select
+                    value={settings.idleLockMinutes}
+                    onChange={(e) => onIdleChange(Number(e.target.value))}
+                >
+                    {IDLE_LOCK_CHOICES.map((m) => (
+                        <option key={m} value={m}>
+                            {idleLabel(m)}
+                        </option>
+                    ))}
+                </select>
+            </div>
         </form>
     );
 }

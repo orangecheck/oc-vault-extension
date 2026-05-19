@@ -51,9 +51,10 @@ messages _from_ the content script, which a hostile page may influence.
    unpicked entry's secret.
 3. **No plaintext secret at rest.** The disk-backed stores —
    `storage.local` and IndexedDB — hold only ciphertext and non-secret
-   settings. The one exception is `K` in the RAM-only `storage.session`
-   (invariant 1), which never touches disk. A decrypted entry is never
-   persisted anywhere.
+   settings. The exceptions are `K` and an in-flight pending-capture
+   password, both held in the RAM-only `storage.session` (never disk) so
+   they survive a worker restart. A decrypted entry is never persisted
+   anywhere.
 4. **No fill, save, reveal, or copy without a user gesture.** The extension
    never auto-submits a form.
 5. **A credential crosses into a page only when the page's (or filled

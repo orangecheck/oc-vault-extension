@@ -58,8 +58,13 @@ export type Message =
      * are new / changed and holds them as a pending capture (PLAN.md §6).
      */
     | { kind: 'capture-login'; url: string; username: string; password: string }
-    /** Content-script: is there a pending capture relevant to this page? */
-    | { kind: 'get-pending-capture'; pageUrl: string }
+    /**
+     * Is there a pending capture? With `pageUrl` (content script) it is
+     * returned only when the page's registrable domain matches the
+     * capture; without it (the popup, a trusted surface) it is returned
+     * unconditionally.
+     */
+    | { kind: 'get-pending-capture'; pageUrl?: string }
     /** Write the pending capture to the vault. */
     | { kind: 'commit-capture' }
     /** Discard the pending capture. */

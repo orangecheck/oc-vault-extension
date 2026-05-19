@@ -1,19 +1,19 @@
 /**
- * Content script — autofill (PLAN.md §5, SECURITY.md §4–5).
+ * Content script — autofill + capture (PLAN.md §5–6, SECURITY.md §4–5).
  *
- * Runs in every frame of every page. It is the UNTRUSTED-ADJACENT actor:
- * it never holds the vault key or the entry index. It detects login forms,
- * draws a non-spoofable affordance, and — only after the user clicks it —
- * asks the worker which entries match THIS frame's origin and, on a pick,
- * for that one entry's field values to fill.
- *
- * The iframe rule is structural: this script runs per-frame, so every
- * `match-page` carries the frame's own `location`, never the parent's.
+ * Runs in every frame. The UNTRUSTED-ADJACENT actor: it never holds the
+ * vault key or the entry index. It draws a subtle affordance on a
+ * *focused* login field, fills on a user pick, and offers to save a
+ * submitted login. The iframe rule is structural — per-frame injection
+ * means every `match-page` carries this frame's own origin.
  */
 
 import type { VaultEntrySummary } from '@/lib/crypto';
 import { detectLoginForms, type LoginForm } from '@/lib/forms';
 import { send } from '@/lib/messaging';
+
+const ORANGE = '#ea580c';
+const Z = '2147483646';
 
 export default defineContentScript({
     matches: ['<all_urls>'],
@@ -22,16 +22,23 @@ export default defineContentScript({
     main() {
         if (typeof document === 'undefined') return;
 
-        /** Affordance host elements, keyed by the field they sit on. */
-        const affordances = new WeakMap<HTMLInputElement, HTMLElement>();
+        // Settings — fetched once; the affordance and capture honour them.
+        let showFieldIcon = true;
+        let captureEnabled = true;
+        void send({ kind: 'get-settings' })
+            .then((s) => {
+                showFieldIcon = s.showFieldIcon;
+                captureEnabled = s.captureEnabled;
+            })
+            .catch(() => undefined);
+
+        /** Detected login field → its form. Rebuilt on each scan. */
+        let fieldForm = new WeakMap<HTMLInputElement, LoginForm>();
         let picker: HTMLElement | null = null;
         let savePrompt: HTMLElement | null = null;
 
-        const ORANGE = '#ea580c';
-
         /* ── filling ────────────────────────────────────────────────────── */
 
-        /** Set an input's value so framework-controlled inputs notice. */
         function setValue(input: HTMLInputElement, value: string): void {
             const setter = Object.getOwnPropertyDescriptor(
                 HTMLInputElement.prototype,
@@ -55,9 +62,66 @@ export default defineContentScript({
                     if (value) setValue(field.element, value);
                 }
             } catch {
-                // resolution failed (re-locked, etc.) — leave the form be
+                // resolution failed (re-locked) — leave the form be
             }
             closePicker();
+        }
+
+        /* ── shared shadow-DOM panel chrome ─────────────────────────────── */
+
+        /** Build the panel chrome (style + header) inside a shadow root. */
+        function panel(root: ShadowRoot): HTMLElement {
+            root.innerHTML = '';
+            const style = document.createElement('style');
+            style.textContent = `
+                .panel { font:12px ui-monospace,SFMono-Regular,Menlo,monospace;
+                    background:#141414; color:#e5e5e5; border:1px solid #2a2a2a;
+                    border-radius:8px; width:264px; overflow:hidden;
+                    box-shadow:0 10px 32px rgba(0,0,0,.55); }
+                .head { display:flex; align-items:center; gap:6px; padding:8px 11px;
+                    border-bottom:1px solid #2a2a2a; color:#8a8a8a; font-size:9.5px;
+                    letter-spacing:.16em; text-transform:uppercase; }
+                .head svg { display:block; }
+                .head strong { color:${ORANGE}; }
+                .msg { padding:11px; color:#9a9a9a; line-height:1.55; }
+                .who { padding:0 11px 10px; color:#e5e5e5; word-break:break-all; }
+                .row { display:flex; align-items:center; gap:8px; width:100%;
+                    text-align:left; cursor:pointer; background:none; border:none;
+                    border-bottom:1px solid #2a2a2a; color:#e5e5e5; font:inherit;
+                    padding:10px 11px; }
+                .row:last-child { border-bottom:none; }
+                .row:hover { background:#1f1f1f; }
+                .row .t { margin-left:auto; color:#8a8a8a; font-size:9px;
+                    letter-spacing:.12em; text-transform:uppercase; }
+                .actions { display:flex; gap:7px; padding:9px 11px;
+                    border-top:1px solid #2a2a2a; }
+                .act { flex:1; cursor:pointer; font:inherit; font-size:11px;
+                    padding:8px; border-radius:5px; border:1px solid #2a2a2a;
+                    background:none; color:#e5e5e5; }
+                .act:hover { border-color:${ORANGE}; }
+                .act-primary { background:${ORANGE}; color:#fff; border-color:${ORANGE}; }
+            `;
+            root.append(style);
+            const wrap = document.createElement('div');
+            wrap.className = 'panel';
+            const head = document.createElement('div');
+            head.className = 'head';
+            head.innerHTML = `${markSvg(13, '#8a8a8a')}<span>oc <strong>vault</strong></span>`;
+            wrap.append(head);
+            root.append(wrap);
+            return wrap;
+        }
+
+        function panelMessage(p: HTMLElement, text: string): void {
+            const div = document.createElement('div');
+            div.className = 'msg';
+            div.textContent = text;
+            p.append(div);
+        }
+
+        /** The OC keyhole mark, drawn at `size` px in `color`. */
+        function markSvg(size: number, color: string): string {
+            return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="${color}" aria-hidden="true"><circle cx="12" cy="9" r="4.3"/><path d="M9.3 12 h5.4 l1.5 8 h-8.4 z"/></svg>`;
         }
 
         /* ── the picker ─────────────────────────────────────────────────── */
@@ -67,114 +131,141 @@ export default defineContentScript({
             picker = null;
         }
 
-        function pickerPanel(root: ShadowRoot): HTMLElement {
-            root.innerHTML = '';
-            const style = document.createElement('style');
-            style.textContent = `
-                .panel { font: 12px ui-monospace,SFMono-Regular,Menlo,monospace;
-                    background:#141414; color:#e5e5e5; border:1px solid #2a2a2a;
-                    border-radius:6px; width:240px; overflow:hidden;
-                    box-shadow:0 8px 28px rgba(0,0,0,.55); }
-                .head { padding:7px 10px; border-bottom:1px solid #2a2a2a;
-                    color:#8a8a8a; font-size:9.5px; letter-spacing:.14em;
-                    text-transform:uppercase; }
-                .head strong { color:${ORANGE}; }
-                .msg { padding:12px 10px; color:#8a8a8a; line-height:1.5; }
-                .row { display:block; width:100%; text-align:left; cursor:pointer;
-                    background:none; border:none; border-bottom:1px solid #2a2a2a;
-                    color:#e5e5e5; font:inherit; padding:9px 10px; }
-                .row:last-child { border-bottom:none; }
-                .row:hover { background:#1f1f1f; }
-                .row .t { color:#8a8a8a; font-size:9px; letter-spacing:.12em;
-                    text-transform:uppercase; margin-left:6px; }
-                .who { padding:0 10px 10px; color:#e5e5e5; word-break:break-all; }
-                .actions { display:flex; gap:6px; padding:8px 10px;
-                    border-top:1px solid #2a2a2a; }
-                .act { flex:1; cursor:pointer; font:inherit; font-size:11px;
-                    padding:7px; border-radius:4px; border:1px solid #2a2a2a;
-                    background:none; color:#e5e5e5; }
-                .act:hover { border-color:${ORANGE}; }
-                .act-primary { background:${ORANGE}; color:#fff; border-color:${ORANGE}; }
-            `;
-            root.append(style);
-            const panel = document.createElement('div');
-            panel.className = 'panel';
-            const head = document.createElement('div');
-            head.className = 'head';
-            head.innerHTML = 'oc <strong>vault</strong>';
-            panel.append(head);
-            root.append(panel);
-            return panel;
-        }
-
-        function message(panel: HTMLElement, text: string): void {
-            const div = document.createElement('div');
-            div.className = 'msg';
-            div.textContent = text;
-            panel.append(div);
-        }
-
         async function openPicker(form: LoginForm, anchor: HTMLInputElement): Promise<void> {
             closePicker();
             const host = document.createElement('div');
             const rect = anchor.getBoundingClientRect();
-            host.style.cssText = `position:fixed; z-index:2147483647; left:${rect.left}px; top:${
-                rect.bottom + 4
-            }px;`;
+            host.style.cssText = `position:fixed; z-index:${Z}; left:${Math.max(
+                8,
+                rect.left
+            )}px; top:${rect.bottom + 5}px;`;
             const root = host.attachShadow({ mode: 'closed' });
             document.body.append(host);
             picker = host;
 
-            const panel = pickerPanel(root);
-            message(panel, 'checking your vault…');
-
+            const p = panel(root);
+            panelMessage(p, 'checking your vault…');
             try {
                 const state = await send({ kind: 'get-state' });
-                panel.lastElementChild?.remove();
+                p.lastElementChild?.remove();
                 if (state.status !== 'unlocked') {
-                    message(panel, 'OC Vault is locked — open the OC toolbar icon to unlock it.');
+                    panelMessage(p, 'OC Vault is locked — open the OC toolbar icon to unlock.');
                     return;
                 }
                 if (state.entryCount === 0) {
-                    // Unlocked, but the vault has no synced entries — almost
-                    // always cloud sync not enabled. Point at the popup.
-                    message(
-                        panel,
-                        'No synced entries in your vault. Open the OC toolbar icon — if it asks you to enable cloud sync, autofill needs that.'
+                    panelMessage(
+                        p,
+                        'No synced entries — open the OC toolbar icon to check your vault.'
                     );
                     return;
                 }
                 const matches = await send({ kind: 'match-page', pageUrl: location.href });
-                renderMatches(panel, matches, form);
+                renderMatches(p, matches, form);
             } catch {
-                panel.lastElementChild?.remove();
-                message(panel, 'could not reach the vault.');
+                p.lastElementChild?.remove();
+                panelMessage(p, 'could not reach the vault.');
             }
         }
 
         function renderMatches(
-            panel: HTMLElement,
+            p: HTMLElement,
             matches: VaultEntrySummary[],
             form: LoginForm
         ): void {
             if (matches.length === 0) {
-                message(panel, 'no saved logins for this site.');
+                panelMessage(p, 'no saved logins for this site.');
                 return;
             }
             for (const entry of matches) {
                 const row = document.createElement('button');
                 row.className = 'row';
-                row.textContent = entry.name;
-                const tag = document.createElement('span');
-                tag.className = 't';
-                tag.textContent = entry.type;
-                row.append(tag);
+                row.innerHTML = `${markSvg(12, ORANGE)}<span></span><span class="t"></span>`;
+                (row.querySelector('span:not(.t)') as HTMLElement).textContent = entry.name;
+                (row.querySelector('.t') as HTMLElement).textContent = entry.type;
                 row.addEventListener('click', () => void fillEntry(form, entry.id));
-                panel.append(row);
+                p.append(row);
             }
         }
 
-        /* ── save prompt (capture, PLAN.md §6) ──────────────────────────── */
+        /* ── the field affordance — subtle, focus-triggered ─────────────── */
+
+        let affordance: HTMLElement | null = null;
+        let affordanceField: HTMLInputElement | null = null;
+        let hideTimer: ReturnType<typeof setTimeout> | null = null;
+
+        function ensureAffordance(): HTMLElement {
+            if (affordance) return affordance;
+            const host = document.createElement('div');
+            host.style.cssText = `position:fixed; z-index:${Z}; display:none;`;
+            const root = host.attachShadow({ mode: 'closed' });
+            const style = document.createElement('style');
+            style.textContent = `
+                .mark { width:20px; height:20px; padding:0; border:none;
+                    background:transparent; cursor:pointer; display:flex;
+                    align-items:center; justify-content:center; color:#8b8b8b;
+                    opacity:.65; transition:opacity .12s,color .12s; }
+                .mark:hover, .mark:focus-visible { color:${ORANGE}; opacity:1;
+                    outline:none; }
+            `;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'mark';
+            btn.title = 'OC Vault — fill a saved login';
+            btn.setAttribute('aria-label', 'fill with OC Vault');
+            btn.innerHTML = markSvg(15, 'currentColor');
+            // Keep the field focused when the mark is pressed.
+            btn.addEventListener('pointerdown', (e) => e.preventDefault());
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (affordanceField) {
+                    const form = fieldForm.get(affordanceField);
+                    if (form) void openPicker(form, affordanceField);
+                }
+            });
+            root.append(style, btn);
+            document.body.append(host);
+            affordance = host;
+            return host;
+        }
+
+        function placeAffordance(field: HTMLInputElement): void {
+            const host = ensureAffordance();
+            const r = field.getBoundingClientRect();
+            if (r.width < 24 || r.height < 12) {
+                host.style.display = 'none';
+                return;
+            }
+            host.style.display = '';
+            host.style.left = `${r.right - 24}px`;
+            host.style.top = `${r.top + (r.height - 20) / 2}px`;
+        }
+
+        function showAffordance(field: HTMLInputElement): void {
+            if (!showFieldIcon) return;
+            if (hideTimer) {
+                clearTimeout(hideTimer);
+                hideTimer = null;
+            }
+            affordanceField = field;
+            placeAffordance(field);
+        }
+
+        function hideAffordanceSoon(): void {
+            if (hideTimer) clearTimeout(hideTimer);
+            hideTimer = setTimeout(() => {
+                if (affordance) affordance.style.display = 'none';
+                affordanceField = null;
+            }, 200);
+        }
+
+        function repositionAffordance(): void {
+            if (affordanceField && affordance && affordance.style.display !== 'none') {
+                placeAffordance(affordanceField);
+            }
+        }
+
+        /* ── capture save prompt (PLAN.md §6) ───────────────────────────── */
 
         function closePrompt(): void {
             savePrompt?.remove();
@@ -186,29 +277,28 @@ export default defineContentScript({
             host: string;
             username: string;
         }): void {
-            // After a navigation the prompt has no anchor field — show it
-            // toast-style, and only in the top frame.
-            if (window.top !== window) return;
+            if (window.top !== window) return; // top frame only
             closePrompt();
             const host = document.createElement('div');
-            host.style.cssText = 'position:fixed; z-index:2147483647; right:16px; bottom:16px;';
+            // Top-right, near the toolbar — not a bottom-of-page banner.
+            host.style.cssText = `position:fixed; z-index:${Z}; right:14px; top:14px;`;
             const root = host.attachShadow({ mode: 'closed' });
             document.body.append(host);
             savePrompt = host;
 
-            const panel = pickerPanel(root);
+            const p = panel(root);
             const msg = document.createElement('div');
             msg.className = 'msg';
             msg.textContent =
                 info.mode === 'update'
                     ? `Update the saved login for ${info.host}?`
                     : `Save this login for ${info.host} to OC Vault?`;
-            panel.append(msg);
+            p.append(msg);
             if (info.username) {
                 const who = document.createElement('div');
                 who.className = 'who';
                 who.textContent = info.username;
-                panel.append(who);
+                p.append(who);
             }
             const actions = document.createElement('div');
             actions.className = 'actions';
@@ -226,16 +316,20 @@ export default defineContentScript({
                 save.textContent = 'saving…';
                 void send({ kind: 'commit-capture' })
                     .then(() => closePrompt())
-                    .catch(() => {
-                        msg.textContent = 'could not save — open the OC popup and retry.';
+                    .catch((err: unknown) => {
+                        save.textContent = info.mode === 'update' ? 'update' : 'save';
+                        msg.textContent = /locked/i.test(String(err))
+                            ? 'OC Vault is locked — unlock it (the popup is opening) to save this login.'
+                            : 'could not save — try again.';
                     });
             });
             actions.append(dismiss, save);
-            panel.append(actions);
+            p.append(actions);
         }
 
         /** On a login submit, hand the typed values to the worker to judge. */
         function onSubmit(): void {
+            if (!captureEnabled) return;
             for (const form of detectLoginForms()) {
                 const pw = form.fields.find((f) => f.role === 'password')?.element;
                 if (!pw || !pw.value) continue;
@@ -260,66 +354,14 @@ export default defineContentScript({
             }
         }
 
-        /* ── the field affordance ───────────────────────────────────────── */
-
-        function attachAffordance(field: HTMLInputElement, form: LoginForm): void {
-            if (affordances.has(field)) return;
-            const host = document.createElement('div');
-            host.style.cssText =
-                'position:fixed; z-index:2147483646; width:18px; height:18px; pointer-events:auto;';
-            const root = host.attachShadow({ mode: 'closed' });
-            const style = document.createElement('style');
-            style.textContent = `
-                .mark { width:18px; height:18px; border-radius:4px; cursor:pointer;
-                    background:${ORANGE}; display:flex; align-items:center;
-                    justify-content:center; box-shadow:0 1px 4px rgba(0,0,0,.4); }
-                .mark span { width:7px; height:7px; border:2px solid #fff;
-                    border-radius:50%; }
-            `;
-            const mark = document.createElement('div');
-            mark.className = 'mark';
-            mark.title = 'fill with OC Vault';
-            mark.append(document.createElement('span'));
-            mark.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                void openPicker(form, field);
-            });
-            root.append(style, mark);
-            document.body.append(host);
-
-            affordances.set(field, host);
-            positionHost(host, field);
-        }
-
-        function positionHost(host: HTMLElement, field: HTMLInputElement): void {
-            const rect = field.getBoundingClientRect();
-            if (rect.width === 0 || rect.height === 0 || !field.isConnected) {
-                host.style.display = 'none';
-                return;
-            }
-            host.style.display = '';
-            host.style.left = `${rect.right - 22}px`;
-            host.style.top = `${rect.top + (rect.height - 18) / 2}px`;
-        }
-
-        /** Re-place every affordance over its (re-detected) field. */
-        function repositionAll(): void {
-            for (const form of detectLoginForms()) {
-                for (const field of form.fields) {
-                    const host = affordances.get(field.element);
-                    if (host) positionHost(host, field.element);
-                }
-            }
-        }
-
-        /* ── scan + observe ─────────────────────────────────────────────── */
+        /* ── scan + listeners ───────────────────────────────────────────── */
 
         function scan(): void {
+            const next = new WeakMap<HTMLInputElement, LoginForm>();
             for (const form of detectLoginForms()) {
-                for (const field of form.fields) attachAffordance(field.element, form);
+                for (const field of form.fields) next.set(field.element, form);
             }
-            repositionAll();
+            fieldForm = next;
         }
 
         let scanTimer: ReturnType<typeof setTimeout> | null = null;
@@ -328,9 +370,29 @@ export default defineContentScript({
             scanTimer = setTimeout(scan, 300);
         }
 
-        window.addEventListener('scroll', repositionAll, { capture: true, passive: true });
-        window.addEventListener('resize', repositionAll, { passive: true });
-        // Dismiss the picker on an outside click.
+        // The affordance appears only when a recognised login field is
+        // focused — keyboard, mouse or touch all fire `focusin`.
+        document.addEventListener(
+            'focusin',
+            (e) => {
+                const t = e.target;
+                if (t instanceof HTMLInputElement && fieldForm.has(t)) showAffordance(t);
+            },
+            { capture: true }
+        );
+        document.addEventListener(
+            'focusout',
+            (e) => {
+                const t = e.target;
+                if (t instanceof HTMLInputElement && fieldForm.has(t)) hideAffordanceSoon();
+            },
+            { capture: true }
+        );
+        window.addEventListener('scroll', repositionAffordance, {
+            capture: true,
+            passive: true,
+        });
+        window.addEventListener('resize', repositionAffordance, { passive: true });
         window.addEventListener(
             'click',
             (e) => {
@@ -338,8 +400,6 @@ export default defineContentScript({
             },
             { capture: true }
         );
-        // Capture a login on submit — fires even when the page's own handler
-        // calls preventDefault (SPA logins), and before a real navigation.
         window.addEventListener('submit', onSubmit, { capture: true });
         new MutationObserver(scheduleScan).observe(document.documentElement, {
             childList: true,
@@ -348,8 +408,8 @@ export default defineContentScript({
 
         scan();
 
-        // A login submitted just before a navigation surfaces its save
-        // prompt here, on the page it landed on.
+        // A login submitted just before a navigation surfaces its prompt
+        // here, on the page it landed on.
         if (window.top === window) {
             void send({ kind: 'get-pending-capture', pageUrl: location.href })
                 .then((r) => {

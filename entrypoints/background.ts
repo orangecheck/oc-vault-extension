@@ -40,6 +40,9 @@ import { loadSettings, saveSettings, type Settings } from '@/lib/settings';
 
 const IDLE_ALARM = 'oc-idle-lock';
 const CAPTURE_TTL_MS = 2 * 60_000;
+/** storage.session slot for the pending capture — RAM-only, survives a
+ *  worker restart so a save prompt is not lost (SECURITY.md §3). */
+const PENDING_SLOT = 'oc-pending-capture';
 
 /** A login the user just submitted, awaiting a save/update confirmation.
  *  Holds a password → in-memory only, never persisted (SECURITY.md §3). */
@@ -111,12 +114,20 @@ export default defineBackground(() => {
         if (alarm.name === IDLE_ALARM) lock();
     });
 
+    /** Set the pending capture, mirroring it into RAM-only session storage
+     *  so a worker restart between the prompt and the save does not lose it. */
+    function setPending(pc: PendingCapture | null): void {
+        pendingCapture = pc;
+        if (pc) void browser.storage.session.set({ [PENDING_SLOT]: pc });
+        else void browser.storage.session.remove(PENDING_SLOT);
+    }
+
     /** Drop the key and the decrypted index — the vault is locked again. */
     function lock(): VaultState {
         key = null;
         entries = [];
         lastSyncAt = null;
-        pendingCapture = null;
+        setPending(null);
         void clearSessionKey();
         void browser.alarms.clear(IDLE_ALARM);
         return state('locked');
@@ -160,7 +171,7 @@ export default defineBackground(() => {
             await putBlob(id, packEntryForCloud(entry, key));
             entries = [...entries, entry];
         }
-        pendingCapture = null;
+        setPending(null);
     }
 
     /* ── sync ───────────────────────────────────────────────────────────── */
@@ -245,6 +256,10 @@ export default defineBackground(() => {
                     entries = indexFromBlobs(await readBlobCache());
                     void sync().catch(() => undefined); // refresh from the server
                 }
+                // A pending capture also survives the worker restart — it is
+                // RAM-only (storage.session), the same posture as the key.
+                const stored = (await browser.storage.session.get(PENDING_SLOT))[PENDING_SLOT];
+                if (stored) pendingCapture = stored as PendingCapture;
                 restoreAttempted = true;
             })();
         }
@@ -359,7 +374,7 @@ export default defineBackground(() => {
                     entryId = entry.id;
                     break;
                 }
-                pendingCapture = {
+                setPending({
                     url: message.url,
                     host,
                     username: message.username,
@@ -367,19 +382,23 @@ export default defineBackground(() => {
                     mode,
                     entryId,
                     at: Date.now(),
-                };
+                });
                 return { decision: mode, host, username: message.username };
             }
 
             case 'get-pending-capture': {
                 if (!pendingCapture) return { pending: null };
                 if (Date.now() - pendingCapture.at > CAPTURE_TTL_MS) {
-                    pendingCapture = null;
+                    setPending(null);
                     return { pending: null };
                 }
-                // Surface the prompt only on a page of the same registrable
-                // domain as the login — never on an unrelated site.
-                if (matchEntryToPage(pendingCapture.url, message.pageUrl) === 'none') {
+                // A content script (pageUrl given) sees the pending capture
+                // only on the same registrable domain as the login; the
+                // popup (no pageUrl — trusted) sees it unconditionally.
+                if (
+                    message.pageUrl &&
+                    matchEntryToPage(pendingCapture.url, message.pageUrl) === 'none'
+                ) {
                     return { pending: null };
                 }
                 return {
@@ -392,11 +411,23 @@ export default defineBackground(() => {
             }
 
             case 'commit-capture':
+                if (!key) {
+                    // Can't encrypt while locked. Open the popup so the user
+                    // can unlock + confirm in the trusted surface — the
+                    // passphrase must never transit a page (SECURITY.md §1).
+                    try {
+                        await browser.action.openPopup();
+                    } catch {
+                        // openPopup needs a recent gesture / Chrome 127+ —
+                        // the popup still surfaces the pending capture on open.
+                    }
+                    throw new Error('locked');
+                }
                 await commitCapture();
                 return { saved: true };
 
             case 'dismiss-capture':
-                pendingCapture = null;
+                setPending(null);
                 return {};
 
             default:
