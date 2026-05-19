@@ -28,7 +28,14 @@ import {
 import { onMessage, type VaultState } from '@/lib/messaging';
 import { entryMatchesPage, matchEntryToPage } from '@/lib/origin';
 import { clearSessionKey, persistSessionKey, restoreSessionKey } from '@/lib/session-key';
-import { fetchBlob, fetchEscrow, fetchIdentity, listBlobs, NotSignedIn, putBlob } from '@/lib/sync';
+import {
+    fetchBlobs,
+    fetchEscrow,
+    fetchIdentity,
+    listBlobs,
+    NotSignedIn,
+    putBlob,
+} from '@/lib/sync';
 import { loadSettings, saveSettings, type Settings } from '@/lib/settings';
 
 const IDLE_ALARM = 'oc-idle-lock';
@@ -173,21 +180,30 @@ export default defineBackground(() => {
         return next;
     }
 
-    /** Pull every blob from the server, rebuild the index, refresh the cache. */
+    /**
+     * Sync — a DELTA pull, not a full re-fetch.
+     *
+     * The manifest (`/api/blobs`) carries every blob's `updated_at`. A blob
+     * whose `updated_at` matches the ciphertext cache is reused as-is; only
+     * new / changed blobs are fetched (with bounded concurrency). So a full
+     * vault is pulled once, and every later sync does almost no network —
+     * the old code re-fetched all N blobs every time, which on a large
+     * vault was slow and tripped the server rate limit, starving the sync.
+     * Blobs absent from the manifest (deleted) fall out naturally.
+     */
     async function sync(): Promise<VaultState> {
         if (!key) throw new Error('vault is locked');
         const refs = await listBlobs();
-        const blobs: CachedBlob[] = [];
+        const cached = new Map((await readBlobCache()).map((b) => [b.envelope_id, b]));
+        const reused: CachedBlob[] = [];
+        const stale: typeof refs = [];
         for (const ref of refs) {
-            const ciphertext = await fetchBlob(ref.envelope_id);
-            if (ciphertext) {
-                blobs.push({
-                    envelope_id: ref.envelope_id,
-                    updated_at: ref.updated_at,
-                    ciphertext,
-                });
-            }
+            const hit = cached.get(ref.envelope_id);
+            if (hit && hit.updated_at === ref.updated_at) reused.push(hit);
+            else stale.push(ref);
         }
+        const fetched = await fetchBlobs(stale);
+        const blobs: CachedBlob[] = [...reused, ...fetched];
         entries = indexFromBlobs(blobs);
         lastSyncAt = new Date().toISOString();
         // Cache is ciphertext only — safe at rest (SECURITY.md §1).

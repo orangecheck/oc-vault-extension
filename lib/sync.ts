@@ -96,6 +96,41 @@ export async function fetchBlob(envelopeId: string): Promise<string | null> {
     }
 }
 
+/** A blob ref paired with its fetched ciphertext. */
+export interface FetchedBlob {
+    envelope_id: string;
+    updated_at: string;
+    ciphertext: string;
+}
+
+/**
+ * Fetch many blobs with bounded concurrency — fast, but not a thundering
+ * herd against the rate limiter. A blob that fails (transient error) is
+ * simply omitted; the next sync re-fetches it, since it stays absent from
+ * the cache.
+ */
+export async function fetchBlobs(refs: BlobRef[], concurrency = 8): Promise<FetchedBlob[]> {
+    const out: FetchedBlob[] = [];
+    let cursor = 0;
+    async function worker(): Promise<void> {
+        while (cursor < refs.length) {
+            const ref = refs[cursor++]!;
+            const ciphertext = await fetchBlob(ref.envelope_id);
+            if (ciphertext) {
+                out.push({
+                    envelope_id: ref.envelope_id,
+                    updated_at: ref.updated_at,
+                    ciphertext,
+                });
+            }
+        }
+    }
+    await Promise.all(
+        Array.from({ length: Math.min(concurrency, refs.length || 1) }, () => worker())
+    );
+    return out;
+}
+
 /** Upsert one blob's packed ciphertext. Used by capture (Phase 3). */
 export async function putBlob(envelopeId: string, ciphertext: string): Promise<void> {
     await api(`/api/blobs/${encodeURIComponent(envelopeId)}`, {
