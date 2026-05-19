@@ -189,6 +189,13 @@ form {
     padding: 6px 2px 2px;
 }
 
+.who-line {
+    color: var(--muted);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    word-break: break-all;
+}
+
 .entry-clickable {
     cursor: pointer;
 }

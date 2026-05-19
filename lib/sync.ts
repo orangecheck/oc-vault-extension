@@ -58,6 +58,21 @@ export async function fetchEscrow(): Promise<WrappedKey | null> {
     return escrow?.passphrase ?? null;
 }
 
+/**
+ * The signed-in OrangeCheck identity (`did:oc:…`), or null when signed
+ * out. Surfaced in the UI so a "0 entries" vault is never a mystery — it
+ * makes an identity mismatch (a vault that belongs to a *different* OC
+ * identity than the one signed in here) immediately visible.
+ */
+export async function fetchIdentity(): Promise<string | null> {
+    try {
+        const { account } = await api<{ account: { did_oc?: string } }>('/api/auth/me');
+        return account?.did_oc ?? null;
+    } catch {
+        return null;
+    }
+}
+
 export interface BlobRef {
     envelope_id: string;
     updated_at: string;

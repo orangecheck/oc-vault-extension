@@ -24,6 +24,11 @@ const SIGNIN_URL = 'https://ochk.io/signin?return_to=%2Fvault';
 
 type View = 'list' | 'detail' | 'settings';
 
+/** A compact `did:oc:…` for display. */
+function shortDid(did: string): string {
+    return did.length > 26 ? `${did.slice(0, 16)}…${did.slice(-6)}` : did;
+}
+
 export function App() {
     const [state, setState] = useState<VaultState | null>(null);
     const [entries, setEntries] = useState<VaultEntrySummary[]>([]);
@@ -109,6 +114,7 @@ export function App() {
         return (
             <Shell>
                 <UnlockGate
+                    identity={state.identity}
                     busy={busy}
                     error={error}
                     onUnlock={async (passphrase) => {
@@ -132,7 +138,7 @@ export function App() {
 
     const lock = async () => {
         await send({ kind: 'lock' });
-        setState({ status: 'locked', entryCount: 0, lastSyncAt: null });
+        setState({ status: 'locked', entryCount: 0, lastSyncAt: null, identity: state.identity });
         setEntries([]);
         setView('list');
         setDetailId(null);
@@ -244,30 +250,30 @@ export function App() {
             </ul>
             {entries.length === 0 && (
                 <div className="empty">
+                    {state.identity && (
+                        <p className="muted">
+                            signed in as <strong>{shortDid(state.identity)}</strong>
+                        </p>
+                    )}
                     {error ? (
-                        <p className="muted">Couldn&apos;t load your vault: {error}</p>
+                        <p className="error">couldn&apos;t load your vault: {error}</p>
                     ) : (
                         <>
                             <p className="muted">
-                                Your vault has no <strong>cloud-synced</strong> entries.
+                                This identity&apos;s vault has no cloud-synced entries. If your
+                                secrets are saved under a different OrangeCheck identity, sign in as
+                                that one — or, if they aren&apos;t synced yet, enable cloud sync at
+                                vault.ochk.io.
                             </p>
-                            <p className="muted">
-                                OC Vault fills credentials that are synced to your OrangeCheck
-                                account. If your entries live only in the web app on one device,
-                                turn on cloud sync at vault.ochk.io — then they appear here, and
-                                autofill works.
-                            </p>
-                            <a
-                                className="btn"
-                                href="https://vault.ochk.io"
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                open vault.ochk.io
+                            <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
+                                switch identity at ochk.io
                             </a>
                         </>
                     )}
                 </div>
+            )}
+            {entries.length > 0 && state.identity && (
+                <p className="who-line">signed in · {shortDid(state.identity)}</p>
             )}
         </Shell>
     );
@@ -426,10 +432,12 @@ function SettingsView({ onError }: { onError: (message: string | null) => void }
 }
 
 function UnlockGate({
+    identity,
     busy,
     error,
     onUnlock,
 }: {
+    identity: string | null;
     busy: boolean;
     error: string | null;
     onUnlock: (passphrase: string) => void;
@@ -443,6 +451,7 @@ function UnlockGate({
             }}
         >
             <p className="muted">Enter your vault passphrase to unlock.</p>
+            {identity && <p className="who-line">unlocking · {shortDid(identity)}</p>}
             <input
                 className="search"
                 type="password"

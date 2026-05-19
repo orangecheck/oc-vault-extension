@@ -28,7 +28,7 @@ import {
 import { onMessage, type VaultState } from '@/lib/messaging';
 import { entryMatchesPage, matchEntryToPage } from '@/lib/origin';
 import { clearSessionKey, persistSessionKey, restoreSessionKey } from '@/lib/session-key';
-import { fetchBlob, fetchEscrow, listBlobs, NotSignedIn, putBlob } from '@/lib/sync';
+import { fetchBlob, fetchEscrow, fetchIdentity, listBlobs, NotSignedIn, putBlob } from '@/lib/sync';
 import { loadSettings, saveSettings, type Settings } from '@/lib/settings';
 
 const IDLE_ALARM = 'oc-idle-lock';
@@ -53,6 +53,21 @@ export default defineBackground(() => {
     let lastSyncAt: string | null = null;
     let settings: Settings | null = null;
     let pendingCapture: PendingCapture | null = null;
+    /** The signed-in OC identity (`did:oc:…`) — surfaced so a "0 entries"
+     *  vault that belongs to a different identity is visible, not a mystery. */
+    let identity: string | null = null;
+    let identityFetched = false;
+
+    /** Fetch the signed-in identity once per worker instance. */
+    async function ensureIdentity(): Promise<void> {
+        if (identityFetched) return;
+        identityFetched = true;
+        try {
+            identity = await fetchIdentity();
+        } catch {
+            identity = null;
+        }
+    }
 
     async function getSettings(): Promise<Settings> {
         if (!settings) settings = await loadSettings();
@@ -70,6 +85,7 @@ export default defineBackground(() => {
             status,
             entryCount: status === 'unlocked' ? entries.length : 0,
             lastSyncAt: status === 'unlocked' ? lastSyncAt : null,
+            identity,
         };
     }
 
@@ -222,6 +238,7 @@ export default defineBackground(() => {
     onMessage(async (message) => {
         // A fresh worker restores the unlocked key before anything else.
         await ensureRestored();
+        await ensureIdentity();
         // Any interaction with an unlocked vault defers the idle lock.
         if (key) void armIdleLock();
 

@@ -19,6 +19,8 @@ export interface VaultState {
     entryCount: number;
     /** ISO timestamp of the last successful sync, when known. */
     lastSyncAt: string | null;
+    /** The signed-in OrangeCheck identity (`did:oc:…`), or null. */
+    identity: string | null;
 }
 
 /** Exactly what the content script receives to perform one fill. */
