@@ -46,8 +46,14 @@ async function copyWithClear(value: string, clearSeconds: number): Promise<void>
     }
 }
 
+/** Label for the auto-lock setting — 0 means it never auto-locks. */
 function idleLabel(m: number): string {
     return m === 0 ? 'never' : `${m} min`;
+}
+
+/** Same choices, phrased for the unlock screen — 0 means it stays unlocked. */
+function stayUnlockedLabel(m: number): string {
+    return m === 0 ? 'forever' : `${m} min`;
 }
 
 export function App() {
@@ -321,7 +327,12 @@ export function App() {
                                 {entry.favorite ? '★ ' : ''}
                                 {entry.name}
                             </span>
-                            <span className="entry-type">{entry.type}</span>
+                            <span className="entry-type">
+                                {entry.type}
+                                {entry.folder ? (
+                                    <span className="entry-folder">{entry.folder}</span>
+                                ) : null}
+                            </span>
                         </div>
                         <button
                             className="copy"
@@ -535,7 +546,7 @@ function SettingsView({
                 />
             </div>
             <div className="setting">
-                <span>show the autofill icon on fields</span>
+                <span>offer autofill on login fields</span>
                 <Toggle
                     on={settings.showFieldIcon}
                     onClick={() =>
@@ -615,7 +626,7 @@ function UnlockGate({
                 >
                     {IDLE_LOCK_CHOICES.map((m) => (
                         <option key={m} value={m}>
-                            {idleLabel(m)}
+                            {stayUnlockedLabel(m)}
                         </option>
                     ))}
                 </select>

@@ -165,10 +165,24 @@ input:focus {
 }
 
 .entry-type {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     font-size: 9.5px;
     letter-spacing: 0.14em;
     text-transform: uppercase;
     color: var(--muted);
+}
+
+.entry-folder {
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
 }
 
 .copy {

@@ -365,14 +365,19 @@ export default defineBackground(() => {
                     if (typeof f.url !== 'string' || !entryMatchesPage(f.url, message.url)) {
                         continue;
                     }
-                    const stored = typeof f.username === 'string' ? f.username : '';
-                    if (stored !== message.username) continue;
+                    // The password is already in the vault for this site —
+                    // nothing changed, so don't prompt (regardless of which
+                    // entry / username it is stored under).
                     if (f.password === message.password) {
                         return { decision: 'none', host, username: message.username };
                     }
-                    mode = 'update';
-                    entryId = entry.id;
-                    break;
+                    // Same username, a different password → update that entry.
+                    const stored = typeof f.username === 'string' ? f.username : '';
+                    if (stored === message.username) {
+                        mode = 'update';
+                        entryId = entry.id;
+                        break;
+                    }
                 }
                 setPending({
                     url: message.url,

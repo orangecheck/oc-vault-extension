@@ -86,6 +86,8 @@ export interface VaultEntrySummary {
     favorite: boolean;
     /** The associated URL, when the entry type carries one. Plaintext. */
     url?: string;
+    /** The entry's folder, when filed in one. Plaintext metadata. */
+    folder?: string;
 }
 
 /** Thrown when a key unwrap fails — a wrong passphrase or a corrupt blob. */
@@ -152,6 +154,7 @@ export function toSummary(entry: VaultEntry, fields?: VaultEntryFields): VaultEn
         name: entry.name,
         favorite: Boolean(entry.favorite),
         url,
+        folder: typeof entry.folder === 'string' && entry.folder ? entry.folder : undefined,
     };
 }
 
