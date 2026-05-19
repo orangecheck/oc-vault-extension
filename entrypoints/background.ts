@@ -2,12 +2,14 @@
  * Background service worker — the trusted core (PLAN.md §2, SECURITY.md §2).
  *
  * The ONLY component that holds the vault key or decrypts. The popup and
- * (Phase 2) the content script reach it through `lib/messaging`; they never
- * receive the key. The key lives in this worker's memory and nowhere else.
+ * the content script reach it through `lib/messaging`; they never receive
+ * the key.
  *
- * Two ways the vault re-locks (PLAN.md §7): MV3 terminates this worker on
- * idle — the key dies with it — and, while the worker is alive, an idle
- * alarm drops the key after the configured timeout.
+ * MV3 terminates this worker on idle. So while the vault is unlocked the
+ * key is mirrored into `storage.session` — RAM, never disk (see
+ * `lib/session-key`) — and restored on the next wake, so the vault does
+ * not re-lock on every new page. It re-locks only on the idle-lock alarm,
+ * an explicit lock, or a browser restart (PLAN.md §7).
  */
 
 import { readBlobCache, writeBlobCache, type CachedBlob } from '@/lib/cache';
@@ -25,6 +27,7 @@ import {
 } from '@/lib/crypto';
 import { onMessage, type VaultState } from '@/lib/messaging';
 import { entryMatchesPage, matchEntryToPage } from '@/lib/origin';
+import { clearSessionKey, persistSessionKey, restoreSessionKey } from '@/lib/session-key';
 import { fetchBlob, fetchEscrow, listBlobs, NotSignedIn, putBlob } from '@/lib/sync';
 import { loadSettings, saveSettings, type Settings } from '@/lib/settings';
 
@@ -91,6 +94,7 @@ export default defineBackground(() => {
         entries = [];
         lastSyncAt = null;
         pendingCapture = null;
+        void clearSessionKey();
         void browser.alarms.clear(IDLE_ALARM);
         return state('locked');
     }
@@ -187,9 +191,39 @@ export default defineBackground(() => {
         }
     }
 
+    /* ── restore across a worker restart (PLAN.md §7) ───────────────────── */
+
+    let restoreAttempted = false;
+    let restorePromise: Promise<void> | null = null;
+
+    /**
+     * MV3 terminates this worker on idle; on the next wake the key is gone.
+     * Restore it from `storage.session` (still unlocked, just a fresh
+     * worker) before the first message is handled, and rehydrate the entry
+     * index from the ciphertext cache so autofill works immediately. Runs
+     * at most once per worker instance.
+     */
+    function ensureRestored(): Promise<void> {
+        if (restoreAttempted || key) return Promise.resolve();
+        if (!restorePromise) {
+            restorePromise = (async () => {
+                const restored = await restoreSessionKey();
+                if (restored) {
+                    key = restored;
+                    entries = indexFromBlobs(await readBlobCache());
+                    void sync().catch(() => undefined); // refresh from the server
+                }
+                restoreAttempted = true;
+            })();
+        }
+        return restorePromise;
+    }
+
     onMessage(async (message) => {
+        // A fresh worker restores the unlocked key before anything else.
+        await ensureRestored();
         // Any interaction with an unlocked vault defers the idle lock.
-        if (key && message.kind !== 'get-state') void armIdleLock();
+        if (key) void armIdleLock();
 
         switch (message.kind) {
             case 'get-state':
@@ -200,6 +234,8 @@ export default defineBackground(() => {
                 if (!escrow) throw new Error('no vault to unlock — set one up at vault.ochk.io');
                 // unwrapVaultKey throws WrongPassphrase on a bad passphrase.
                 key = unwrapVaultKey(escrow, message.passphrase);
+                // Mirror the key so it survives worker restarts (PLAN.md §7).
+                await persistSessionKey(key);
                 await armIdleLock();
                 // Instant first paint from the ciphertext cache; the popup
                 // follows up with a 'sync' to refresh from the server.

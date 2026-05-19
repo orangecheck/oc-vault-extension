@@ -9,7 +9,7 @@ it does.
 
 | Asset                                                          | Sensitivity                     | Where it is allowed to exist                                           |
 | -------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------- |
-| Vault key `K` (32 bytes)                                       | critical                        | service-worker memory only, while unlocked                             |
+| Vault key `K` (32 bytes)                                       | critical                        | service-worker memory + `storage.session` (RAM, never disk), unlocked  |
 | Vault passphrase                                               | critical                        | in transit through the popup → worker, then discarded                  |
 | Decrypted entry fields (passwords, seed phrases, TOTP secrets) | critical                        | worker memory, transiently; one field in a content script at fill time |
 | Ciphertext blobs                                               | low (server already holds them) | may be cached in `chrome.storage.local`                                |
@@ -37,18 +37,23 @@ messages _from_ the content script, which a hostile page may influence.
 
 ## 3. Invariants (load-bearing — do not break)
 
-1. **`K` exists in exactly one place:** the service worker's memory. It is
-   never sent over a message, never written to `storage`, never logged,
-   never placed in a DOM.
+1. **`K` is never written to disk and never leaves the extension's trusted
+   contexts.** While unlocked it lives in the service worker's memory and
+   is mirrored into `storage.session` — RAM only, wiped on browser close —
+   so it survives MV3 worker restarts (PLAN.md §7). It is never put in
+   `storage.local`, IndexedDB, a message to the content script, a DOM, or
+   a log.
 2. **The content script never receives `K` or the full entry index.**
    After the user clicks the affordance (a gesture) it receives the
    **origin-matched summaries** for this page — names / types / urls, no
    secret — to render the picker; on a pick it receives that one entry's
    requested field **values**. Nothing else, ever — no unmatched entry, no
    unpicked entry's secret.
-3. **No plaintext secret at rest.** `chrome.storage` and IndexedDB hold
-   only ciphertext, non-extractable `CryptoKey` handles, and non-secret
-   settings. A decrypted entry is never persisted.
+3. **No plaintext secret at rest.** The disk-backed stores —
+   `storage.local` and IndexedDB — hold only ciphertext and non-secret
+   settings. The one exception is `K` in the RAM-only `storage.session`
+   (invariant 1), which never touches disk. A decrypted entry is never
+   persisted anywhere.
 4. **No fill, save, reveal, or copy without a user gesture.** The extension
    never auto-submits a form.
 5. **A credential crosses into a page only when the page's (or filled
@@ -107,8 +112,10 @@ simply has no matching entry. Phishing resistance is structural.
 - **Malicious extension update / supply chain** — minimal, pinned
   dependencies; reproducible build; `@orangecheck/*` and `@noble/*` only
   for crypto. Release artifacts to be checksummed; see PLAN §4 Phase 4.
-- **Device theft while unlocked** — the idle-lock timer and MV3 SW
-  termination both drop `K`. "Stay unlocked" is opt-in and off by default.
+- **Device theft while unlocked** — `K` (in RAM) survives only until the
+  idle-lock timeout, an explicit lock, or the browser closing; the
+  configurable idle timeout bounds the exposure window. `K` never reaches
+  disk, so a powered-off / disk-image attack finds only ciphertext.
 - **Brute-force of the escrowed `WrappedKey`** — inherited from oc-vault:
   scrypt N=2^17 plus a generated high-entropy passphrase. The extension
   adds no new brute-force surface.

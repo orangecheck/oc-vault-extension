@@ -31,9 +31,10 @@ security architecture — see `SECURITY.md` §2.
 | **popup**                     | extension origin, its own document      | renders entries it requests from the worker; the unlock passphrase _in transit_ only | the key at rest                                          |
 | **content script**            | injected into web pages, isolated world | after a gesture: the origin-matched summaries, then one picked entry's field values  | the vault key; the full entry index; any unpicked secret |
 
-The vault key lives in **exactly one place: the service worker's memory.**
-The popup and content script ask the worker to act; they never receive the
-key. This is the single most important invariant in the codebase.
+The vault key lives **only in the worker** — its memory, mirrored into the
+RAM-only `storage.session` so it survives a worker restart (§7). The popup
+and content script ask the worker to act; they never receive the key. This
+is the single most important invariant in the codebase.
 
 ## 3. Trust & key model
 
@@ -58,9 +59,10 @@ vault.ochk.io  ──GET /api/blobs/[id]─▶  double-encrypted entry blob ─�
   exposes. Passkey unlock (WebAuthn PRF) is a Phase 4 port of the web app's
   implementation; it is the _recommended_ extension unlock because the
   popup is a frequent, low-friction surface.
-- **Lock** drops `K` from worker memory. It is dropped on: explicit lock,
-  the idle timer, and — by MV3's own lifecycle — service-worker
-  termination. SW death-as-lock is a feature, not a bug (see §7).
+- **Lock** drops `K` — from worker memory and the `storage.session`
+  mirror. It is dropped on an explicit lock, the idle timer, and a browser
+  restart — but NOT on routine worker termination, which the worker
+  transparently recovers from (see §7).
 
 ## 4. Sync
 
@@ -124,19 +126,24 @@ update. Saving writes a new blob; the user confirms every write.
 
 ## 7. The MV3 service-worker lifecycle
 
-MV3 terminates the service worker after ~30s idle. The worker's in-memory
-`K` dies with it. Consequences, by design:
+MV3 terminates the service worker after ~30s idle — the worker's in-memory
+`K` would die with it, forcing a fresh passphrase on every new page. That
+is unusable, so while the vault is unlocked `K` is mirrored into
+`storage.session` (`lib/session-key.ts`):
 
-- **Termination is a lock.** A cold popup after the worker slept shows the
-  unlock gate. For a vault, "locks itself when idle" is the correct
-  default — we lean into it rather than fight it.
-- **"Stay unlocked on this device"** (opt-in, mirroring oc-vault-web #62):
-  `K` is wrapped under a non-extractable WebCrypto `CryptoKey` persisted in
-  IndexedDB; the worker re-derives `K` on wake without a prompt. This
-  trades the idle-lock for convenience and is **off by default**. An
-  explicit lock always clears it.
-- **Idle timer.** Independent of SW lifecycle, an explicit auto-lock timer
-  (configurable) drops `K` and clears any "stay unlocked" wrap.
+- **`storage.session` is RAM, not disk.** It is wiped when the browser
+  closes and is not exposed to content scripts (its default access level
+  is trusted contexts only). `K` is never written to disk — this is the
+  extension's analogue of oc-vault-web's in-tab `sessionStorage` hold.
+- **The worker restores `K` on wake.** A terminated-then-revived worker
+  reads `K` back from `storage.session` and rehydrates the entry index
+  from the ciphertext cache _before_ handling the first message — so the
+  vault stays usable across navigations without a re-unlock.
+- **It still re-locks.** `K` is dropped — and the `storage.session` mirror
+  cleared — by the idle-lock alarm, an explicit lock, and a browser
+  restart. The idle-lock timeout (configurable, default 15 min) is the
+  security bound; `chrome.alarms` survives worker termination, so the
+  timer fires reliably even after the worker slept.
 
 ## 8. Permissions — least privilege, phased
 
