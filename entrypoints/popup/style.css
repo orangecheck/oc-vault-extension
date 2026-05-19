@@ -179,7 +179,15 @@ form {
 
 .topbar-actions {
     display: flex;
+    align-items: center;
     gap: 12px;
+}
+
+.syncing {
+    color: var(--muted);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
 }
 
 .empty {

@@ -38,6 +38,7 @@ export function App() {
     const [typeFilter, setTypeFilter] = useState<VaultEntryType | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
+    const [syncing, setSyncing] = useState(false);
 
     const loadEntries = useCallback(async () => {
         setEntries(await send({ kind: 'list-entries' }));
@@ -61,14 +62,18 @@ export function App() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    /** Unlock paints from the ciphertext cache; this refreshes from the server. */
+    /** Sync runs automatically — on open, and after a capture. No button. */
     const refresh = useCallback(async () => {
+        setSyncing(true);
         try {
             const s = await send({ kind: 'sync' });
             setState(s);
             await loadEntries();
+            setError(null);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'sync failed');
+        } finally {
+            setSyncing(false);
         }
     }, [loadEntries]);
 
@@ -171,9 +176,7 @@ export function App() {
         <Shell
             header={
                 <div className="topbar-actions">
-                    <button className="link" onClick={() => void refresh()}>
-                        sync
-                    </button>
+                    {syncing && <span className="syncing">syncing…</span>}
                     <button className="link" onClick={() => setView('settings')}>
                         settings
                     </button>
@@ -203,7 +206,7 @@ export function App() {
                     ))}
                 </div>
             )}
-            {error && <p className="error">{error}</p>}
+            {error && entries.length > 0 && <p className="error">{error}</p>}
             <ul className="entries">
                 {filtered.map((entry) => (
                     <li
@@ -248,28 +251,23 @@ export function App() {
                     <li className="muted">no entries match your search</li>
                 )}
             </ul>
-            {entries.length === 0 && (
+            {entries.length === 0 && !syncing && (
                 <div className="empty">
                     {state.identity && (
                         <p className="muted">
                             signed in as <strong>{shortDid(state.identity)}</strong>
                         </p>
                     )}
-                    {error ? (
-                        <p className="error">couldn&apos;t load your vault: {error}</p>
-                    ) : (
-                        <>
-                            <p className="muted">
-                                This identity&apos;s vault has no cloud-synced entries. If your
-                                secrets are saved under a different OrangeCheck identity, sign in as
-                                that one — or, if they aren&apos;t synced yet, enable cloud sync at
-                                vault.ochk.io.
-                            </p>
-                            <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
-                                switch identity at ochk.io
-                            </a>
-                        </>
-                    )}
+                    {error && <p className="error">vault.ochk.io: {error}</p>}
+                    <p className="muted">
+                        This identity has no entries the extension can load. Autofill reads your{' '}
+                        <strong>cloud-synced</strong> vault — if your secrets are under a different
+                        OrangeCheck identity, sign in as that one; if cloud sync isn&apos;t on for
+                        this identity, enable it at vault.ochk.io.
+                    </p>
+                    <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
+                        switch identity at ochk.io
+                    </a>
                 </div>
             )}
             {entries.length > 0 && state.identity && (
