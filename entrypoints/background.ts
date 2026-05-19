@@ -323,12 +323,26 @@ export default defineBackground(() => {
                 if (key) await armIdleLock();
                 return settings;
 
-            case 'match-page':
+            case 'match-page': {
                 // Autofill: the origin-matched subset only — metadata
                 // summaries, no secret (SECURITY.md §4).
-                return entries
+                const all = entries
                     .map((e) => toSummary(e, fieldsOf(e)))
                     .filter((s) => s.url && entryMatchesPage(s.url, message.pageUrl));
+                // Dedupe: multiple entries with the same name + type for the
+                // same site are a common artefact of accidental re-saves —
+                // collapse them to one row. A favorite wins; otherwise the
+                // first occurrence. The full vault stays intact (the popup
+                // still lists every entry); the autofill dropdown is just
+                // tidied.
+                const groups = new Map<string, (typeof all)[number]>();
+                for (const s of all) {
+                    const key = `${s.name.toLowerCase()}|${s.type}`;
+                    const prev = groups.get(key);
+                    if (!prev || (s.favorite && !prev.favorite)) groups.set(key, s);
+                }
+                return [...groups.values()];
+            }
 
             case 'fill-values': {
                 // Resolve the requested fields of ONE entry the user picked.
