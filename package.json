@@ -3,6 +3,16 @@
     "version": "0.1.0",
     "private": true,
     "description": "Browser extension companion to vault.ochk.io — unlock once, fill anywhere, trust the origin.",
+    "license": "MIT",
+    "author": "OrangeCheck",
+    "homepage": "https://docs.ochk.io/vault/extension",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/orangecheck/oc-vault-extension"
+    },
+    "bugs": {
+        "url": "https://github.com/orangecheck/oc-vault-extension/issues"
+    },
     "type": "module",
     "scripts": {
         "dev": "wxt",
