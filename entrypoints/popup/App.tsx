@@ -431,9 +431,15 @@ function Shell({ header, children }: { header?: React.ReactNode; children: React
     return (
         <div className="popup">
             <div className="topbar">
-                <span className="brand">
+                <a
+                    className="brand"
+                    href="https://vault.ochk.io/vault"
+                    target="_blank"
+                    rel="noreferrer"
+                    title="open vault.ochk.io"
+                >
                     oc <strong>vault</strong>
-                </span>
+                </a>
                 {header}
             </div>
             <div className="body">{children}</div>

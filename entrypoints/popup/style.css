@@ -58,6 +58,12 @@ body {
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: var(--muted);
+    text-decoration: none;
+    cursor: pointer;
+    transition: color 0.12s;
+}
+.brand:hover {
+    color: var(--fg);
 }
 .brand strong {
     color: var(--primary);
