@@ -41,7 +41,7 @@ export default defineConfig({
                         'authenticationInfo',
                         // The `identity` entry type (name, email, phone,
                         // address) and the signed-in OC identity itself.
-                        'personalIdentifyingInfo',
+                        'personallyIdentifyingInfo',
                         // The `card` entry type (cardholder, number, CVV,
                         // expiry, billing ZIP).
                         'financialAndPaymentInfo',

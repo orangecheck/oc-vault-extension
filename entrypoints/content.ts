@@ -77,15 +77,37 @@ export default defineContentScript({
 
         /* ── the OC keyhole mark (shared by every panel) ────────────────── */
 
-        function markSvg(size: number, color: string): string {
-            return `<svg width="${size}" height="${size}" viewBox="0 0 128 128" fill="${color}" aria-hidden="true"><circle cx="64" cy="51" r="22"/><path d="M55 58 H73 L80 100 H48 Z"/></svg>`;
+        /**
+         * Build the OC keyhole as a fresh SVG element via `createElementNS`.
+         * Used by the panel header, the picker rows, and the field mark —
+         * each call returns a new node so the caller can `append()` it.
+         * (Avoids `innerHTML` so AMO's linter stays clean — every byte of
+         * the SVG is fully under our control here.)
+         */
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+        function markIcon(size: number, color: string): SVGSVGElement {
+            const svg = document.createElementNS(SVG_NS, 'svg');
+            svg.setAttribute('width', String(size));
+            svg.setAttribute('height', String(size));
+            svg.setAttribute('viewBox', '0 0 128 128');
+            svg.setAttribute('fill', color);
+            svg.setAttribute('aria-hidden', 'true');
+            const circle = document.createElementNS(SVG_NS, 'circle');
+            circle.setAttribute('cx', '64');
+            circle.setAttribute('cy', '51');
+            circle.setAttribute('r', '22');
+            svg.append(circle);
+            const path = document.createElementNS(SVG_NS, 'path');
+            path.setAttribute('d', 'M55 58 H73 L80 100 H48 Z');
+            svg.append(path);
+            return svg;
         }
 
         /* ── shared shadow-DOM panel chrome ─────────────────────────────── */
 
         /** Build the panel chrome (style + header) inside a shadow root. */
         function panel(root: ShadowRoot): HTMLElement {
-            root.innerHTML = '';
+            root.replaceChildren();
             const style = document.createElement('style');
             style.textContent = `
                 .panel { font:12px ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -121,7 +143,13 @@ export default defineContentScript({
             wrap.className = 'panel';
             const head = document.createElement('div');
             head.className = 'head';
-            head.innerHTML = `${markSvg(13, ORANGE)}<span>oc <strong>vault</strong></span>`;
+            head.append(markIcon(13, ORANGE));
+            const brand = document.createElement('span');
+            brand.append('oc ');
+            const strong = document.createElement('strong');
+            strong.textContent = 'vault';
+            brand.append(strong);
+            head.append(brand);
             wrap.append(head);
             root.append(wrap);
             return wrap;
@@ -226,9 +254,14 @@ export default defineContentScript({
                 const row = document.createElement('button');
                 row.type = 'button';
                 row.className = 'row';
-                row.innerHTML = `${markSvg(13, ORANGE)}<span class="nm"></span><span class="t"></span>`;
-                (row.querySelector('.nm') as HTMLElement).textContent = entry.name;
-                (row.querySelector('.t') as HTMLElement).textContent = entry.folder || entry.type;
+                row.append(markIcon(13, ORANGE));
+                const nm = document.createElement('span');
+                nm.className = 'nm';
+                nm.textContent = entry.name;
+                const t = document.createElement('span');
+                t.className = 't';
+                t.textContent = entry.folder || entry.type;
+                row.append(nm, t);
                 row.addEventListener('click', () => void fillEntry(form, entry.id));
                 p.append(row);
             }
@@ -261,7 +294,7 @@ export default defineContentScript({
             btn.className = 'mark';
             btn.title = 'OC Vault — fill a saved login';
             btn.setAttribute('aria-label', 'fill with OC Vault');
-            btn.innerHTML = markSvg(13, 'currentColor');
+            btn.append(markIcon(13, 'currentColor'));
             // Keep the field focused (and the keyboard up, on touch) when the
             // mark is pressed.
             btn.addEventListener('pointerdown', (e) => e.preventDefault());
