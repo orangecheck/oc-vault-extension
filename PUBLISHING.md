@@ -228,6 +228,17 @@ _contents_ of the ciphertext disclosed regardless of encryption, which is
 what these declarations describe. Matches the Chrome Web Store data-usage
 checkboxes in §5.
 
+**Spelling note.** The PII category is `personallyIdentifyingInfo` (the
+double-L "personally"), not `personalIdentifyingInfo` — the latter fails
+AMO's manifest validation.
+
+**innerHTML warnings.** AMO's linter flags any `innerHTML` write as a
+warning. The extension's own content script is free of `innerHTML` —
+every SVG mark is built via `document.createElementNS`. Two remaining
+warnings sit inside React 19's compiled bundle (its HTML-parsing
+detection probe + one reconciler path); they are not in our code and
+do not block submission.
+
 ## 6. After it is live
 
 - Record the Chrome Web Store and AMO listing URLs.
