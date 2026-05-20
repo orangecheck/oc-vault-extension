@@ -208,6 +208,26 @@ encrypted vault. There is no analytics and no telemetry. Decrypted secrets
 never leave the user's browser memory; only ciphertext is ever stored or
 sent.
 
+**Firefox AMO data-consent declaration.** As of 2026, AMO requires every
+new MV3 submission to declare its `browser_specific_settings.gecko.data_collection_permissions`.
+OC Vault declares as **`required`** (the user cannot opt out — these are
+the categories of data sealed inside the encrypted blobs the extension
+syncs):
+
+| Category                  | Why                                                                                                 |
+| ------------------------- | --------------------------------------------------------------------------------------------------- |
+| `authenticationInfo`      | The whole product purpose — saved logins, TOTP seeds, API keys.                                     |
+| `personalIdentifyingInfo` | The `identity` entry type + the signed-in OC identity itself.                                       |
+| `financialAndPaymentInfo` | The `card` entry type.                                                                              |
+| `websiteContent`          | Capture reads values the user just typed into a login form; `note` entries store user-typed text.   |
+| `websiteActivity`         | Origin matching reads `location.href` to decide whether to offer a credential for the current site. |
+
+All five are E2E-encrypted under a key derived from the user's passphrase
+before transmission; OrangeCheck holds ciphertext only. AMO wants the
+_contents_ of the ciphertext disclosed regardless of encryption, which is
+what these declarations describe. Matches the Chrome Web Store data-usage
+checkboxes in §5.
+
 ## 6. After it is live
 
 - Record the Chrome Web Store and AMO listing URLs.

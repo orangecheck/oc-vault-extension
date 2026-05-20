@@ -21,7 +21,41 @@ export default defineConfig({
             extension_pages: "script-src 'self'; object-src 'self'",
         },
         browser_specific_settings: {
-            gecko: { id: 'vault@ochk.io' },
+            gecko: {
+                id: 'vault@ochk.io',
+                // Firefox built-in data-consent declaration (AMO requires
+                // this on every new MV3 submission as of 2026). The list
+                // describes the data categories the extension HANDLES on
+                // the user's behalf — every byte is sealed client-side
+                // under a key derived from the user's passphrase before it
+                // leaves the browser, so OrangeCheck only ever holds the
+                // ciphertext. AMO wants the contents of that ciphertext
+                // disclosed regardless.
+                //
+                // Chromium ignores unknown keys under gecko, so this is
+                // safe in the unified Chrome/Firefox manifest.
+                data_collection_permissions: {
+                    required: [
+                        // The whole product purpose — logins, TOTP seeds,
+                        // API keys, recovery codes.
+                        'authenticationInfo',
+                        // The `identity` entry type (name, email, phone,
+                        // address) and the signed-in OC identity itself.
+                        'personalIdentifyingInfo',
+                        // The `card` entry type (cardholder, number, CVV,
+                        // expiry, billing ZIP).
+                        'financialAndPaymentInfo',
+                        // Capture reads values the user just typed into a
+                        // login form at submit time; `note` entries store
+                        // user-typed page-derived content.
+                        'websiteContent',
+                        // Origin matching reads location.href to decide
+                        // whether to offer a saved credential for the
+                        // current site.
+                        'websiteActivity',
+                    ],
+                },
+            },
         },
     },
 });
