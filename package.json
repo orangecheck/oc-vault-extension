@@ -29,7 +29,7 @@
         "@noble/hashes": "^1.5.0",
         "@orangecheck/lock-crypto": "^0.1.0",
         "react": "19.1.0",
-        "react-dom": "19.1.0"
+        "react-dom": "19.2.8"
     },
     "devDependencies": {
         "@types/chrome": "^0.0.287",
