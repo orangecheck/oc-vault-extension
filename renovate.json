@@ -1,0 +1,32 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": ["config:recommended", ":dependencyDashboard", ":semanticCommits"],
+    "labels": ["renovate"],
+    "prConcurrentLimit": 5,
+    "prHourlyLimit": 10,
+    "packageRules": [
+        {
+            "description": "Disabled by default — this Renovate config is scoped to the @orangecheck/* family ONLY. Third-party deps (react, typescript, wxt, @types/*, prettier) are NOT auto-tracked here; bump them by hand when you choose to. This repo previously shipped NO renovate.json at all, and the global config's requireConfig:'optional' meant Renovate fell back to its defaults and tracked everything — nine stale third-party PRs accumulated from June onward, against the family rule.",
+            "matchUpdateTypes": ["patch", "minor", "major"],
+            "enabled": false
+        },
+        {
+            "description": "Auto-merge @orangecheck/* patch + minor — 1-day stability window so a yanked publish never reaches a consumer.",
+            "matchPackageNames": ["/^@orangecheck//"],
+            "matchUpdateTypes": ["patch", "minor"],
+            "enabled": true,
+            "groupName": "@orangecheck/* (family)",
+            "automerge": true,
+            "automergeType": "branch",
+            "minimumReleaseAge": "1 day"
+        },
+        {
+            "description": "Human-review @orangecheck/* major bumps — these change wire shape.",
+            "matchPackageNames": ["/^@orangecheck//"],
+            "matchUpdateTypes": ["major"],
+            "enabled": true,
+            "automerge": false,
+            "labels": ["renovate", "major-bump"]
+        }
+    ]
+}
