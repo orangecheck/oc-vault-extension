@@ -11,13 +11,13 @@
             "enabled": false
         },
         {
-            "description": "Auto-merge @orangecheck/* patch + minor — 1-day stability window so a yanked publish never reaches a consumer.",
+            "description": "Auto-merge @orangecheck/* patch + minor — 1-day stability window so a yanked publish never reaches a consumer. automergeType is 'pr', not 'branch': every consumer's ci.yml triggers on pull_request, so a bare branch push runs no type-check, lint, or test at all. Branch mode merged dependency bumps that CI had never seen.",
             "matchPackageNames": ["/^@orangecheck//"],
             "matchUpdateTypes": ["patch", "minor"],
             "enabled": true,
             "groupName": "@orangecheck/* (family)",
             "automerge": true,
-            "automergeType": "branch",
+            "automergeType": "pr",
             "minimumReleaseAge": "1 day"
         },
         {
