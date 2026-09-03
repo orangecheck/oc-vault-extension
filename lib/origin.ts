@@ -15,18 +15,76 @@
 
 /** Compact multi-label public suffixes. Conservative — extend via PSL in Phase 2. */
 const MULTI_LABEL_SUFFIXES = new Set([
+    // ── ccTLD second levels ────────────────────────────────────────────────
     'co.uk',
     'org.uk',
     'gov.uk',
     'ac.uk',
+    'me.uk',
     'co.jp',
+    'ne.jp',
+    'or.jp',
     'com.au',
+    'net.au',
+    'org.au',
     'com.br',
     'co.nz',
+    'net.nz',
     'co.in',
     'com.mx',
     'co.za',
     'com.sg',
+    'com.tr',
+    'co.il',
+    'co.kr',
+    'com.cn',
+    'com.hk',
+    'com.tw',
+    'co.th',
+    'com.ar',
+    'com.co',
+    'com.pl',
+    'com.ua',
+    'co.id',
+    // ── SHARED-HOSTING suffixes. These are the ones that made this a
+    //    credential-disclosure bug rather than a cosmetic gap: every customer
+    //    of the platform is a sibling subdomain, so treating the suffix as the
+    //    registrable domain offers alice's credential on attacker's page.
+    'github.io',
+    'gitlab.io',
+    'vercel.app',
+    'netlify.app',
+    'pages.dev',
+    'workers.dev',
+    'herokuapp.com',
+    'herokudns.com',
+    'blogspot.com',
+    'wordpress.com',
+    'myshopify.com',
+    'web.app',
+    'firebaseapp.com',
+    'azurewebsites.net',
+    'cloudapp.net',
+    'elasticbeanstalk.com',
+    'onrender.com',
+    'fly.dev',
+    'railway.app',
+    'surge.sh',
+    'glitch.me',
+    'repl.co',
+    'replit.dev',
+    'ngrok.io',
+    'ngrok-free.app',
+    'notion.site',
+    'substack.com',
+    'medium.com',
+    'tumblr.com',
+    'zendesk.com',
+    'freshdesk.com',
+    'atlassian.net',
+    'sharepoint.com',
+    'salesforce.com',
+    'appspot.com',
 ]);
 
 /** A normalized origin: scheme + host + port. Null when the URL is unusable. */
@@ -42,8 +100,30 @@ export function originOf(url: string): string | null {
 
 /**
  * The registrable domain (eTLD+1) of a hostname — `mail.example.co.uk`
- * → `example.co.uk`. Falls back to the full host when the suffix is
- * unknown (stricter, never looser).
+ * → `example.co.uk`.
+ *
+ * READ THIS BEFORE TRUSTING IT. Determining eTLD+1 correctly requires the
+ * Public Suffix List; this is a hand-maintained approximation, and the
+ * approximation fails in the LOOSE direction — an unknown multi-label suffix
+ * is treated as a registrable domain rather than as a suffix.
+ *
+ * That is a credential-disclosure bug, not a cosmetic gap. With `github.io`
+ * absent from the set below, `alice.github.io` and `attacker.github.io` both
+ * reduce to `github.io`, so matchEntryToPage answers `'registrable'` and the
+ * vault offers alice's credential on the attacker's page. The same held for
+ * vercel.app, pages.dev, herokuapp.com, blogspot.com and every second-level
+ * ccTLD outside the list. The twelve entries that WERE listed behaved
+ * correctly, which is exactly why a test written against the list passed.
+ *
+ * The docstring here used to claim it "falls back to the full host when the
+ * suffix is unknown (stricter, never looser)". It did not: it returned the
+ * last two labels. The claim described the property this function should have
+ * and the code did the opposite.
+ *
+ * The set now covers the shared-hosting suffixes — where every customer is a
+ * sibling subdomain and the exposure is real — plus the common ccTLD second
+ * levels. It is still an approximation. A complete fix is the PSL; until then,
+ * treat `'registrable'` as a hint and prefer `'exact'` for anything sensitive.
  */
 export function registrableDomain(host: string): string {
     const labels = host.toLowerCase().split('.').filter(Boolean);
