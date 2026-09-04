@@ -68,11 +68,22 @@ message to the content script, into `storage`, or into a log.
 
 ## 4. Origin matching — the autofill trust check
 
-A stored entry carries the URL it was saved on. `lib/origin.ts` decides
-whether an entry may be offered on a given page.
+A stored entry carries the URL it was saved on. `origin` in
+**`@orangecheck/vault-core`** decides whether an entry may be offered on a
+given page. It used to be a local copy in `lib/origin.ts`; a copy of a
+security check is one you have to remember to fix twice, and
+`registrableDomain` has already had a real cross-tenant bug once.
 
-- Compare by **registrable domain (eTLD+1)** using the Public Suffix List,
-  with an **exact-origin** match preferred and surfaced first.
+- Compare by **registrable domain (eTLD+1)**, with an **exact-origin** match
+  preferred and surfaced first.
+- **The suffix set is NOT the full Public Suffix List.** This document said it
+  was; it is a compact 66-entry table of known multi-label suffixes, and the
+  module says so in its own header. The failure mode is deliberate and
+  one-directional: an _unrecognised_ multi-part suffix falls back to
+  exact-host matching, which can only ever be stricter, never looser. So an
+  unknown suffix costs a convenience match, never a wrong offer. Swapping in
+  a real PSL (`tldts`) is a Phase 2 item and a prerequisite for shipping
+  autofill.
 - **Scheme matters:** an `https` entry is never offered on `http`.
 - **No path matching, no subdomain wildcards, no fuzzy/Levenshtein
   matching, no user-editable allowlist of "equivalent" domains** in v1.

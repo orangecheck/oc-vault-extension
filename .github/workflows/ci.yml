@@ -1,0 +1,47 @@
+name: ci
+
+# The extension had NO CI. It ships to the Chrome store and handles decrypted
+# passwords, seed phrases and TOTP secrets (SECURITY.md §1), and its only
+# testing was the manual click-through in TESTING.md — so a change that broke
+# the build reached a store submission before anyone noticed.
+#
+# npm, not yarn: this repo tracks package-lock.json.
+
+on:
+    push:
+        branches: [main]
+    pull_request:
+        branches: [main]
+
+concurrency:
+    group: ci-${{ github.ref }}
+    cancel-in-progress: true
+
+jobs:
+    quality:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/setup-node@v4
+              with:
+                  node-version: '20'
+                  cache: 'npm'
+
+            - name: install
+              run: npm ci
+
+            - name: format check
+              run: npm run format:check
+
+            - name: type check
+              run: npm run compile
+
+            # A real MV3 build. `tsc --noEmit` does not exercise the wxt
+            # bundler, and the bundler is where an import of a server-only
+            # module fails — which is exactly how the vault-core consolidation
+            # could have broken this.
+            - name: build (chrome)
+              run: npm run build
+
+            - name: build (firefox)
+              run: npm run build:firefox
