@@ -103,7 +103,42 @@ export class WrongPassphrase extends Error {
  * scrypt-derives the wrap key, then AES-256-GCM-decrypts. Throws
  * `WrongPassphrase` on any failure — never returns a bogus key.
  */
+/**
+ * Accepted scrypt work factors.
+ *
+ * The blob carries its own N, r and p, and the blob comes from the server.
+ * scrypt's memory cost is 128 · N · r bytes, so a blob declaring N = 2^24 with
+ * r = 8 asks for 17 GiB — in a service worker, before the passphrase is
+ * tested. Bounded here rather than trusted; the same bound is in
+ * @orangecheck/vault-core, which is where this whole module should eventually
+ * come from (origin matching already does).
+ */
+const MIN_KDF_N = 1 << 14;
+const MAX_KDF_N = 1 << 20;
+const MAX_KDF_R = 16;
+const MAX_KDF_P = 4;
+
+function assertAcceptableKdfParams(w: Pick<WrappedKey, 'kdf_n' | 'kdf_r' | 'kdf_p'>): void {
+    const ok = (v: unknown): boolean => typeof v === 'number' && Number.isInteger(v) && v > 0;
+    if (!ok(w.kdf_n) || !ok(w.kdf_r) || !ok(w.kdf_p)) {
+        throw new Error('unsupported key-derivation parameters');
+    }
+    // scrypt requires a power of two; otherwise it fails deep in the library.
+    if ((w.kdf_n & (w.kdf_n - 1)) !== 0) {
+        throw new Error('unsupported key-derivation parameters');
+    }
+    if (w.kdf_n < MIN_KDF_N || w.kdf_n > MAX_KDF_N) {
+        throw new Error('unsupported key-derivation parameters');
+    }
+    if (w.kdf_r > MAX_KDF_R || w.kdf_p > MAX_KDF_P) {
+        throw new Error('unsupported key-derivation parameters');
+    }
+}
+
 export function unwrapVaultKey(w: WrappedKey, passphrase: string): Uint8Array {
+    // Checked before any memory is spent, and deliberately NOT a
+    // WrongPassphrase: a blob asking for 17 GiB is not a typo.
+    assertAcceptableKdfParams(w);
     const wrapKey = scrypt(utf8Encode(passphrase), b64urlDecode(w.kdf_salt), {
         N: w.kdf_n,
         r: w.kdf_r,
