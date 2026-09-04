@@ -28,6 +28,7 @@
     "dependencies": {
         "@noble/hashes": "^1.5.0",
         "@orangecheck/lock-crypto": "^0.1.0",
+        "@orangecheck/vault-core": "0.3.0",
         "react": "19.1.0",
         "react-dom": "19.1.0"
     },

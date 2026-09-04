@@ -26,7 +26,11 @@ import {
     type VaultEntryFields,
 } from '@/lib/crypto';
 import { onMessage, type VaultState } from '@/lib/messaging';
-import { entryMatchesPage, matchEntryToPage } from '@/lib/origin';
+// Origin matching is a SECURITY BOUNDARY, so it lives in one place.
+// lib/origin.ts was a copy of vault-core's — behaviourally identical, but a
+// copy of a security check is a copy you have to remember to fix twice, and
+// registrableDomain has already had a real cross-tenant bug once.
+import { entryMatchesPage, matchEntryToPage } from '@orangecheck/vault-core';
 import { clearSessionKey, persistSessionKey, restoreSessionKey } from '@/lib/session-key';
 import {
     fetchBlobs,
