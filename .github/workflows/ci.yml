@@ -45,3 +45,19 @@ jobs:
 
             - name: build (firefox)
               run: npm run build:firefox
+
+    # Renovate cannot read check runs, so it cannot tell whether CI passed.
+    # This job can: it runs only after the gating jobs above succeed.
+    merge-renovate:
+        name: Merge family bump
+        needs: [quality]
+        if: github.event_name == 'pull_request' && github.head_ref == 'renovate/@orangecheck-(family)'
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+            pull-requests: write
+        steps:
+            - name: Rebase-merge the PR
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: gh pr merge ${{ github.event.pull_request.number }} --rebase --repo ${{ github.repository }}
