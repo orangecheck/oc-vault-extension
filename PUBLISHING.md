@@ -146,7 +146,7 @@ your own vault.ochk.io account; OrangeCheck only ever serves ciphertext.
 Open source, MIT licensed. Reproducible build. Audited crypto: AES-256-GCM
 under a scrypt-derived (N=2^17) key.
 
-Learn more — https://docs.ochk.io/vault/extension
+Learn more — https://ochk.io/docs/vault/extension
 Source     — https://github.com/orangecheck/oc-vault-extension
 Privacy    — https://ochk.io/privacy
 ```
@@ -170,7 +170,7 @@ password manager, autofill, bitcoin, end-to-end encryption, zero-knowledge
 | Field          | Value                        |
 | -------------- | ---------------------------- |
 | Homepage       | `https://vault.ochk.io`      |
-| Support        | `https://docs.ochk.io/vault` |
+| Support        | `https://ochk.io/docs/vault` |
 | Privacy policy | `https://ochk.io/privacy`    |
 | Source (AMO)   | upload `-sources.zip` per §3 |
 
