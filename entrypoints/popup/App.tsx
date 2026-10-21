@@ -157,7 +157,7 @@ export function App() {
     if (state.status === 'signed-out') {
         return (
             <Shell>
-                <p className="muted">Sign in with your OrangeCheck identity to open your vault.</p>
+                <p className="muted">Sign in with your orangecheck identity to open your vault.</p>
                 <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
                     sign in at ochk.io
                 </a>
@@ -378,7 +378,7 @@ export function App() {
                     <p className="muted">
                         This identity has no entries the extension can load. Autofill reads your{' '}
                         <strong>cloud-synced</strong> vault — if your secrets are under a different
-                        OrangeCheck identity, sign in as that one; if cloud sync isn&apos;t on for
+                        orangecheck identity, sign in as that one; if cloud sync isn&apos;t on for
                         this identity, enable it at vault.ochk.io.
                     </p>
                     <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
@@ -666,7 +666,7 @@ function UnlockGate({
         >
             <p className="muted">
                 Enter your vault passphrase. Being signed in lets the extension fetch your encrypted
-                vault; the passphrase decrypts it — OrangeCheck never can.
+                vault; the passphrase decrypts it — orangecheck never can.
             </p>
             {identity && <p className="who-line">unlocking · {shortDid(identity)}</p>}
             <input
