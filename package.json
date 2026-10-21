@@ -23,7 +23,8 @@
         "compile": "tsc --noEmit",
         "postinstall": "wxt prepare",
         "format": "prettier --write .",
-        "format:check": "prettier --check ."
+        "format:check": "prettier --check .",
+        "test": "node --test 'lib/**/*.test.mjs'"
     },
     "dependencies": {
         "@noble/hashes": "^1.5.0",

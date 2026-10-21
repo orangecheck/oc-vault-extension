@@ -25,7 +25,8 @@ import {
     type VaultEntry,
     type VaultEntryFields,
 } from '@/lib/crypto';
-import { onMessage, type VaultState } from '@/lib/messaging';
+import { lockOnSignOut } from '@/lib/lock-on-sign-out';
+import { onMessage, type Message, type VaultState } from '@/lib/messaging';
 // Origin matching is a SECURITY BOUNDARY, so it lives in one place.
 // lib/origin.ts was a copy of vault-core's — behaviourally identical, but a
 // copy of a security check is a copy you have to remember to fix twice, and
@@ -258,7 +259,8 @@ export default defineBackground(() => {
                 if (restored) {
                     key = restored;
                     entries = indexFromBlobs(await readBlobCache());
-                    void sync().catch(() => undefined); // refresh from the server
+                    // Refresh from the server; signed out there, the key goes.
+                    void lockOnSignOut(sync, isSignedOut, lock).catch(() => undefined);
                 }
                 // A pending capture also survives the worker restart — it is
                 // RAM-only (storage.session), the same posture as the key.
@@ -270,7 +272,12 @@ export default defineBackground(() => {
         return restorePromise;
     }
 
-    onMessage(async (message) => {
+    /** Signed out of vault.ochk.io: a 401 from any request. */
+    function isSignedOut(err: unknown): boolean {
+        return err instanceof NotSignedIn;
+    }
+
+    async function handle(message: Message): Promise<unknown> {
         // A fresh worker restores the unlocked key before anything else.
         await ensureRestored();
         await ensureIdentity();
@@ -456,5 +463,18 @@ export default defineBackground(() => {
             default:
                 throw new Error('unknown message');
         }
-    });
+    }
+
+    // A request that finds the person signed out drops the key, as the web vault
+    // does on any page: signing out means the passphrase is needed again.
+    onMessage((message) =>
+        lockOnSignOut(
+            () => handle(message),
+            isSignedOut,
+            () => {
+                lock();
+                return state('signed-out');
+            }
+        )
+    );
 });

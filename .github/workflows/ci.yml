@@ -24,7 +24,8 @@ jobs:
             - uses: actions/checkout@v4
             - uses: actions/setup-node@v4
               with:
-                  node-version: '20'
+                  # 24: the unit tests run TypeScript through Node's own type stripping.
+                  node-version: '24'
                   cache: 'npm'
 
             - name: install
@@ -35,6 +36,9 @@ jobs:
 
             - name: type check
               run: npm run compile
+
+            - name: test
+              run: npm test
 
             # A real MV3 build. `tsc --noEmit` does not exercise the wxt
             # bundler, and the bundler is where an import of a server-only
