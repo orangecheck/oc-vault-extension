@@ -157,7 +157,7 @@ export function App() {
     if (state.status === 'signed-out') {
         return (
             <Shell>
-                <p className="muted">Sign in with your orangecheck identity to open your vault.</p>
+                <p className="muted">Sign in with your orangecheck account to open your vault.</p>
                 <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
                     sign in at ochk.io
                 </a>
@@ -376,10 +376,10 @@ export function App() {
                     )}
                     {error && <p className="error">vault.ochk.io: {error}</p>}
                     <p className="muted">
-                        This identity has no entries the extension can load. Autofill reads your{' '}
+                        This account has no entries the extension can load. Autofill reads your{' '}
                         <strong>cloud-synced</strong> vault — if your secrets are under a different
-                        orangecheck identity, sign in as that one; if cloud sync isn&apos;t on for
-                        this identity, enable it at vault.ochk.io.
+                        orangecheck account, sign in as that one; if cloud sync isn&apos;t on for
+                        this account, enable it at vault.ochk.io.
                     </p>
                     <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
                         switch identity at ochk.io
