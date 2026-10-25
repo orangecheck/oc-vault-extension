@@ -27,6 +27,7 @@ import {
 } from '@/lib/crypto';
 import { lockOnSignOut } from '@/lib/lock-on-sign-out';
 import { onMessage, type Message, type VaultState } from '@/lib/messaging';
+import { admit, callerOf, NotAllowed, type Caller } from '@/lib/sender';
 // Origin matching is a SECURITY BOUNDARY, so it lives in one place.
 // lib/origin.ts was a copy of vault-core's — behaviourally identical, but a
 // copy of a security check is a copy you have to remember to fix twice, and
@@ -272,12 +273,20 @@ export default defineBackground(() => {
         return restorePromise;
     }
 
+    /** A page may save or dismiss only a capture made on its own site. */
+    function assertCaptureFor(caller: Caller): void {
+        if (caller.kind === 'extension') return;
+        if (!pendingCapture || matchEntryToPage(pendingCapture.url, caller.url) === 'none') {
+            throw new NotAllowed('no capture for this page');
+        }
+    }
+
     /** Signed out of vault.ochk.io: a 401 from any request. */
     function isSignedOut(err: unknown): boolean {
         return err instanceof NotSignedIn;
     }
 
-    async function handle(message: Message): Promise<unknown> {
+    async function handle(message: Message, caller: Caller): Promise<unknown> {
         // A fresh worker restores the unlocked key before anything else.
         await ensureRestored();
         await ensureIdentity();
@@ -285,8 +294,14 @@ export default defineBackground(() => {
         if (key) void armIdleLock();
 
         switch (message.kind) {
-            case 'get-state':
-                return probe();
+            case 'get-state': {
+                const s = await probe();
+                // A page learns the lock state, nothing about the account.
+                if (caller.kind === 'page') {
+                    return { status: s.status, entryCount: 0, lastSyncAt: null, identity: null };
+                }
+                return s;
+            }
 
             case 'unlock': {
                 const escrow = await fetchEscrow();
@@ -358,10 +373,15 @@ export default defineBackground(() => {
             case 'fill-values': {
                 // Resolve the requested fields of ONE entry the user picked.
                 // Only those values, only that entry — never the key, never
-                // another entry (SECURITY.md §3, invariant 2).
+                // another entry (SECURITY.md §3, invariant 2). And only into a
+                // page the entry is for: match-page's rule, applied to the sender.
+                if (caller.kind !== 'page') throw new NotAllowed('fill-values comes from a page');
                 const entry = entries.find((e) => e.id === message.entryId);
                 if (!entry) throw new Error('entry not found');
                 const all = fieldsOf(entry);
+                if (typeof all.url !== 'string' || !entryMatchesPage(all.url, caller.url)) {
+                    throw new NotAllowed('this entry is not for this page');
+                }
                 const values: Record<string, string> = {};
                 for (const name of message.fields) {
                     const v = all[name];
@@ -441,6 +461,7 @@ export default defineBackground(() => {
             }
 
             case 'commit-capture':
+                assertCaptureFor(caller);
                 if (!key) {
                     // Can't encrypt while locked. Open the popup so the user
                     // can unlock + confirm in the trusted surface — the
@@ -457,6 +478,7 @@ export default defineBackground(() => {
                 return { saved: true };
 
             case 'dismiss-capture':
+                assertCaptureFor(caller);
                 setPending(null);
                 return {};
 
@@ -467,14 +489,18 @@ export default defineBackground(() => {
 
     // A request that finds the person signed out drops the key, as the web vault
     // does on any page: signing out means the passphrase is needed again.
-    onMessage((message) =>
-        lockOnSignOut(
-            () => handle(message),
+    // Who sent it decides what may be asked (lib/sender): a page speaks only for
+    // itself, through the few requests autofill and capture need.
+    onMessage(async (raw, sender) => {
+        const caller = callerOf(sender, browser.runtime.getURL(''), browser.runtime.id);
+        const message = admit(raw, caller);
+        return lockOnSignOut(
+            () => handle(message, caller!),
             isSignedOut,
             () => {
                 lock();
                 return state('signed-out');
             }
-        )
-    );
+        );
+    });
 });

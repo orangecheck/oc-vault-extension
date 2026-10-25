@@ -35,6 +35,15 @@ Messages cross these boundaries through `lib/messaging.ts`. Every message
 is treated as attacker-controlled and validated on receipt — including
 messages _from_ the content script, which a hostile page may influence.
 
+The worker tells these worlds apart by the sender record the browser
+attaches, never by anything in the message (`lib/sender.ts`). An extension
+page may send any request. A content script may send only the requests
+autofill and capture use, and it speaks for its own frame: the page a
+request is about is the sender's URL, a fill is answered only for an entry
+that matches that URL (§4), a pending capture is shown, saved or dismissed
+only for that site, and the lock state is all it learns about the account.
+Any other sender, such as another extension, is refused.
+
 ## 3. Invariants (load-bearing — do not break)
 
 1. **`K` is never written to disk and never leaves the extension's trusted
