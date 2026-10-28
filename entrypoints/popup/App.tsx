@@ -18,6 +18,7 @@ import {
     IDLE_LOCK_CHOICES,
     type Settings,
 } from '@/lib/settings';
+import { SIGNIN_URL, VAULT_DASHBOARD } from '@/lib/signin-url';
 
 /** Field names whose value is masked until the user reveals it. */
 const SECRET_FIELDS = new Set([
@@ -31,8 +32,6 @@ const SECRET_FIELDS = new Set([
     // A login's TOTP seed.
     'totp',
 ]);
-
-const SIGNIN_URL = 'https://ochk.io/signin?return_to=%2Fvault';
 
 type View = 'list' | 'detail' | 'settings' | 'generate';
 
@@ -501,7 +500,7 @@ function Shell({ header, children }: { header?: React.ReactNode; children: React
             <div className="topbar">
                 <a
                     className="brand"
-                    href="https://vault.ochk.io/vault"
+                    href={VAULT_DASHBOARD}
                     target="_blank"
                     rel="noreferrer"
                     title="open vault.ochk.io"
