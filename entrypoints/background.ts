@@ -13,6 +13,7 @@
  */
 
 import { readBlobCache, writeBlobCache, type CachedBlob } from '@/lib/cache';
+import { b64urlDecode } from '@orangecheck/lock-crypto';
 import {
     decryptFields,
     encryptFields,
@@ -33,6 +34,14 @@ import { admit, callerOf, NotAllowed, type Caller } from '@/lib/sender';
 // copy of a security check is a copy you have to remember to fix twice, and
 // registrableDomain has already had a real cross-tenant bug once.
 import { entryMatchesPage, matchEntryToPage } from '@orangecheck/vault-core';
+import {
+    escrowFingerprint,
+    forgetPasskey,
+    readPasskey,
+    unwrapUnderPrf,
+    wrapUnderPrf,
+    writePasskey,
+} from '@/lib/passkey';
 import { clearSessionKey, persistSessionKey, restoreSessionKey } from '@/lib/session-key';
 import {
     fetchBlobs,
@@ -49,6 +58,20 @@ const CAPTURE_TTL_MS = 2 * 60_000;
 /** storage.session slot for the pending capture — RAM-only, survives a
  *  worker restart so a save prompt is not lost (SECURITY.md §3). */
 const PENDING_SLOT = 'oc-pending-capture';
+/** storage.session slot naming the escrowed wrap the held key came from
+ *  (lib/passkey `escrowFingerprint`) — not a secret; RAM-only like the key. */
+const KEY_ESCROW_SLOT = 'oc-key-escrow';
+
+/** A b64url value from a message, decoded to exactly `len` bytes, or a refusal. */
+function bytesOf(value: unknown, len: number, what: string): Uint8Array {
+    try {
+        const out = typeof value === 'string' ? b64urlDecode(value) : null;
+        if (out && out.length === len) return out;
+    } catch {
+        // fall through
+    }
+    throw new Error(`malformed ${what}`);
+}
 
 /** A login the user just submitted, awaiting a save/update confirmation.
  *  Holds a password → in-memory only, never persisted (SECURITY.md §3). */
@@ -65,6 +88,8 @@ interface PendingCapture {
 export default defineBackground(() => {
     /* ── in-memory session — never persisted (SECURITY.md §3) ──────────── */
     let key: Uint8Array | null = null;
+    /** Which escrowed wrap `key` came from; a passkey made now is bound to it. */
+    let keyEscrow: string | null = null;
     let entries: VaultEntry[] = [];
     let lastSyncAt: string | null = null;
     let settings: Settings | null = null;
@@ -131,6 +156,8 @@ export default defineBackground(() => {
     /** Drop the key and the decrypted index — the vault is locked again. */
     function lock(): VaultState {
         key = null;
+        keyEscrow = null;
+        void browser.storage.session.remove(KEY_ESCROW_SLOT);
         entries = [];
         lastSyncAt = null;
         setPending(null);
@@ -259,6 +286,10 @@ export default defineBackground(() => {
                 const restored = await restoreSessionKey();
                 if (restored) {
                     key = restored;
+                    const fp = (await browser.storage.session.get(KEY_ESCROW_SLOT))[
+                        KEY_ESCROW_SLOT
+                    ];
+                    keyEscrow = typeof fp === 'string' ? fp : null;
                     entries = indexFromBlobs(await readBlobCache());
                     // Refresh from the server; signed out there, the key goes.
                     void lockOnSignOut(sync, isSignedOut, lock).catch(() => undefined);
@@ -271,6 +302,65 @@ export default defineBackground(() => {
             })();
         }
         return restorePromise;
+    }
+
+    /** Note which escrowed wrap the held key came from, in memory and storage.session. */
+    async function holdEscrow(fp: string): Promise<void> {
+        keyEscrow = fp;
+        await browser.storage.session.set({ [KEY_ESCROW_SLOT]: fp });
+    }
+
+    /* ── passkey unlock (lib/passkey.ts) ────────────────────────────────── */
+
+    async function passkeyEnroll(m: Extract<Message, { kind: 'passkey-enroll' }>) {
+        if (!key) throw new Error('unlock the vault before setting up a passkey');
+        if (!identity) throw new Error('sign in at ochk.io first');
+        // A key restored from an older session has no escrow on record; one
+        // passphrase unlock names it, so a passkey never wraps a key of unknown origin.
+        if (!keyEscrow) throw new Error('lock, then unlock with your passphrase once, first');
+        const secret = bytesOf(m.prfSecret, 32, 'passkey secret');
+        bytesOf(m.prfSalt, 32, 'passkey salt');
+        if (typeof m.credentialId !== 'string' || !m.credentialId) {
+            throw new Error('malformed passkey id');
+        }
+        const record = {
+            credentialId: m.credentialId,
+            prfSalt: m.prfSalt,
+            wrapped: wrapUnderPrf(key, secret),
+            escrow: keyEscrow,
+            createdAt: new Date().toISOString(),
+        };
+        secret.fill(0);
+        await writePasskey(identity, record);
+        return { enrolled: true as const };
+    }
+
+    async function passkeyUnlock(m: Extract<Message, { kind: 'passkey-unlock' }>) {
+        if (key) return state('unlocked');
+        if (!identity) throw new Error('sign in at ochk.io first');
+        const record = await readPasskey(identity);
+        if (!record) throw new Error('no passkey is set up for this vault in this browser');
+        const escrow = await fetchEscrow();
+        if (!escrow) throw new Error('no vault to unlock — set one up at vault.ochk.io');
+        if (escrowFingerprint(escrow) !== record.escrow) {
+            // The passphrase or the vault key changed since: this wrap may hold a
+            // key the vault no longer uses. It is removed, never tried.
+            await forgetPasskey(identity);
+            throw new Error(
+                'Your vault passphrase or key changed since this passkey was set up. Unlock with your passphrase, then set the passkey up again in settings.'
+            );
+        }
+        const secret = bytesOf(m.prfSecret, 32, 'passkey secret');
+        const unwrapped = unwrapUnderPrf(record.wrapped, secret);
+        secret.fill(0);
+        if (!unwrapped)
+            throw new Error("That passkey didn't unlock this vault. Use your passphrase.");
+        key = unwrapped;
+        await holdEscrow(record.escrow);
+        await persistSessionKey(key);
+        await armIdleLock();
+        entries = indexFromBlobs(await readBlobCache());
+        return state('unlocked');
     }
 
     /** A page may save or dismiss only a capture made on its own site. */
@@ -308,6 +398,7 @@ export default defineBackground(() => {
                 if (!escrow) throw new Error('no vault to unlock — set one up at vault.ochk.io');
                 // unwrapVaultKey throws WrongPassphrase on a bad passphrase.
                 key = unwrapVaultKey(escrow, message.passphrase);
+                await holdEscrow(escrowFingerprint(escrow));
                 // Mirror the key so it survives worker restarts (PLAN.md §7).
                 await persistSessionKey(key);
                 await armIdleLock();
@@ -319,6 +410,26 @@ export default defineBackground(() => {
 
             case 'lock':
                 return lock();
+
+            case 'passkey-status': {
+                const record = identity ? await readPasskey(identity) : null;
+                return {
+                    enrolled: !!record,
+                    target: record
+                        ? { credentialId: record.credentialId, prfSalt: record.prfSalt }
+                        : null,
+                };
+            }
+
+            case 'passkey-enroll':
+                return passkeyEnroll(message);
+
+            case 'passkey-unlock':
+                return passkeyUnlock(message);
+
+            case 'passkey-forget':
+                if (identity) await forgetPasskey(identity);
+                return { enrolled: false };
 
             case 'sync':
                 return sync();

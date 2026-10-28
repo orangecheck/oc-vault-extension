@@ -460,3 +460,15 @@ input[type='range'] {
     accent-color: var(--primary);
     width: 140px;
 }
+
+/* Passkey unlock. */
+.passkey-on {
+    color: var(--primary);
+    font-size: 12px;
+}
+
+.passkey-done {
+    color: var(--fg);
+    font-size: 12px;
+    line-height: 1.5;
+}

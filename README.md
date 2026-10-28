@@ -72,12 +72,15 @@ entrypoints/
   background.ts     service worker — holds the key, syncs, decrypts
   popup/            toolbar popup — unlock gate, entry list (React)
   content.ts        page script — form detection + autofill (Phase 2)
+  passkey/          the passkey window — set up / unlock with a passkey (Phase 4)
 lib/
   crypto.ts         key unwrap + entry decryption (mirrors oc-vault-web)
   sync.ts           the vault.ochk.io /api/blobs client
   messaging.ts      typed message bus between worker / popup / content
   origin.ts         origin matching — the autofill trust check
   forms.ts          login-form heuristics (Phase 2)
+  passkey.ts        passkey unlock: the PRF ceremonies and the key seal (Phase 4)
+  password-gen.ts   the password / passphrase generator (Phase 4)
 ```
 
 ## Relationship to the family

@@ -7,14 +7,16 @@ it does.
 
 ## 1. Assets
 
-| Asset                                                          | Sensitivity                     | Where it is allowed to exist                                           |
-| -------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------- |
-| Vault key `K` (32 bytes)                                       | critical                        | service-worker memory + `storage.session` (RAM, never disk), unlocked  |
-| Vault passphrase                                               | critical                        | in transit through the popup → worker, then discarded                  |
-| Decrypted entry fields (passwords, seed phrases, TOTP secrets) | critical                        | worker memory, transiently; one field in a content script at fill time |
-| Ciphertext blobs                                               | low (server already holds them) | may be cached in `chrome.storage.local`                                |
-| Entry metadata index (names, types, origins)                   | moderate                        | worker memory; popup, while open                                       |
-| The `oc_session` cookie                                        | high                            | the browser's cookie store; never read by extension code               |
+| Asset                                                          | Sensitivity                                          | Where it is allowed to exist                                           |
+| -------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
+| Vault key `K` (32 bytes)                                       | critical                                             | service-worker memory + `storage.session` (RAM, never disk), unlocked  |
+| Vault passphrase                                               | critical                                             | in transit through the popup → worker, then discarded                  |
+| Passkey PRF secret (32 bytes)                                  | critical                                             | in transit from the passkey window to the worker, then zeroed          |
+| `K` sealed to a passkey (opt-in)                               | ciphertext; opens only with the passkey's PRF secret | `storage.local`, one per identity, while passkey unlock is on          |
+| Decrypted entry fields (passwords, seed phrases, TOTP secrets) | critical                                             | worker memory, transiently; one field in a content script at fill time |
+| Ciphertext blobs                                               | low (server already holds them)                      | may be cached in `chrome.storage.local`                                |
+| Entry metadata index (names, types, origins)                   | moderate                                             | worker memory; popup, while open                                       |
+| The `oc_session` cookie                                        | high                                                 | the browser's cookie store; never read by extension code               |
 
 ## 2. Trust boundaries
 
@@ -46,12 +48,14 @@ Any other sender, such as another extension, is refused.
 
 ## 3. Invariants (load-bearing — do not break)
 
-1. **`K` is never written to disk and never leaves the extension's trusted
-   contexts.** While unlocked it lives in the service worker's memory and
-   is mirrored into `storage.session` — RAM only, wiped on browser close —
-   so it survives MV3 worker restarts (PLAN.md §7). It is never put in
-   `storage.local`, IndexedDB, a message to the content script, a DOM, or
-   a log.
+1. **`K` is never written to disk in the clear and never leaves the
+   extension's trusted contexts.** While unlocked it lives in the service
+   worker's memory and is mirrored into `storage.session` — RAM only, wiped
+   on browser close — so it survives MV3 worker restarts (PLAN.md §7). It is
+   never put in `storage.local`, IndexedDB, a message to the content script,
+   a DOM, or a log. The one form of `K` on disk is the opt-in passkey seal
+   (§5, passkey unlock): AES-256-GCM under sha256 of a passkey's PRF secret,
+   the same seal oc-vault-web keeps in IndexedDB.
 2. **The content script never receives `K` or the full entry index.**
    After the user clicks the affordance (a gesture) it receives the
    **origin-matched summaries** for this page — names / types / urls, no
@@ -59,8 +63,8 @@ Any other sender, such as another extension, is refused.
    requested field **values**. Nothing else, ever — no unmatched entry, no
    unpicked entry's secret.
 3. **No plaintext secret at rest.** The disk-backed stores —
-   `storage.local` and IndexedDB — hold only ciphertext and non-secret
-   settings. The exceptions are `K` and an in-flight pending-capture
+   `storage.local` and IndexedDB — hold only ciphertext (the blob cache, the
+   passkey seal) and non-secret settings. The exceptions are `K` and an in-flight pending-capture
    password, both held in the RAM-only `storage.session` (never disk) so
    they survive a worker restart. A decrypted entry is never persisted
    anywhere.
@@ -137,6 +141,20 @@ simply has no matching entry. Phishing resistance is structural.
   idle-lock timeout, an explicit lock, or the browser closing; the
   configurable idle timeout bounds the exposure window. `K` never reaches
   disk, so a powered-off / disk-image attack finds only ciphertext.
+- **Passkey unlock** (`lib/passkey.ts`, opt-in) — the passkey belongs to
+  this extension (its relying party is the extension's own origin) and
+  unlocks only behind the authenticator's user verification. Its PRF secret
+  is never stored: the passkey window reads it, hands it once to the worker
+  — an extension-page-only request, refused from a content script — and
+  zeroes it. A disk image finds only the seal, which needs a secret only the
+  authenticator yields, behind a gesture. The seal is bound to the signed-in
+  identity and to a fingerprint of the escrowed `WrappedKey` it came from:
+  if the escrow changes (a new passphrase or a new key), the passkey is
+  refused and removed, never tried, so a stale `K` can never unlock and
+  never write blobs the vault cannot read. A key restored from an older
+  session, with no escrow on record, cannot be sealed until one passphrase
+  unlock names its escrow. The ceremony runs in its own extension window,
+  not the popup, which closes when an authenticator prompt takes focus.
 - **Brute-force of the escrowed `WrappedKey`** — inherited from oc-vault:
   scrypt N=2^17 plus a generated high-entropy passphrase. The extension
   adds no new brute-force surface.

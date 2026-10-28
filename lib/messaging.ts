@@ -10,6 +10,7 @@
  */
 
 import type { VaultEntryFields, VaultEntrySummary } from './crypto';
+import type { PasskeyTarget } from './passkey';
 import type { Settings } from './settings';
 
 /** The worker's lock state, safe to share with any surface. */
@@ -68,7 +69,21 @@ export type Message =
     /** Write the pending capture to the vault. */
     | { kind: 'commit-capture' }
     /** Discard the pending capture. */
-    | { kind: 'dismiss-capture' };
+    | { kind: 'dismiss-capture' }
+    /**
+     * Extension pages only (never in PAGE_KINDS): passkey unlock (lib/passkey.ts).
+     * `passkey-status` names this identity's passkey, if any — not a secret.
+     */
+    | { kind: 'passkey-status' }
+    /**
+     * Wrap the held vault key under a new passkey's PRF secret (b64url) and keep
+     * the wrap in storage.local. The secret is used once and dropped.
+     */
+    | { kind: 'passkey-enroll'; credentialId: string; prfSalt: string; prfSecret: string }
+    /** Unwrap the vault key with the PRF secret (b64url) the passkey just gave. */
+    | { kind: 'passkey-unlock'; prfSecret: string }
+    /** Remove this identity's passkey from this browser. */
+    | { kind: 'passkey-forget' };
 
 /** What the popup / content script needs to prompt about a capture. */
 export interface PendingCaptureInfo {
@@ -97,6 +112,10 @@ export interface ReplyData {
     'get-pending-capture': { pending: PendingCaptureInfo | null };
     'commit-capture': { saved: boolean };
     'dismiss-capture': Record<string, never>;
+    'passkey-status': { enrolled: boolean; target: PasskeyTarget | null };
+    'passkey-enroll': { enrolled: true };
+    'passkey-unlock': VaultState;
+    'passkey-forget': { enrolled: false };
 }
 
 /** Send a message to the worker and await its typed reply. */

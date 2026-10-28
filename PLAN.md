@@ -56,9 +56,13 @@ vault.ochk.io  ──GET /api/blobs/[id]─▶  double-encrypted entry blob ─�
   the scrypt wrap key, unwrap to `K`. `K` is held in the worker; the
   passphrase is discarded immediately.
 - **Recovery codes, passkeys** — the same break-glass paths the web app
-  exposes. Passkey unlock (WebAuthn PRF) is a Phase 4 port of the web app's
-  implementation; it is the _recommended_ extension unlock because the
-  popup is a frequent, low-friction surface.
+  exposes. Passkey unlock (WebAuthn PRF) is a port of the web app's
+  implementation (`lib/passkey.ts`, Phase 4); it is the _recommended_
+  extension unlock because the popup is a frequent, low-friction surface.
+  The passkey is the extension's own (relying party: its origin), sealed to
+  this browser, bound to the identity and the escrowed wrap it came from,
+  and run in its own small window because the popup closes on focus loss
+  (SECURITY.md §5).
 - **Lock** drops `K` — from worker memory and the `storage.session`
   mirror. It is dropped on an explicit lock, the idle timer, and a browser
   restart — but NOT on routine worker termination, which the worker
@@ -181,7 +185,8 @@ permission: the session cookie rides ordinary `fetch`.
   confirm the worker writes the blob. The pending capture holds a
   password, so it is memory-only — never persisted. Known gap: forms with
   no `<form>` element (a `<div>` + button) are not captured in v1.
-- **Phase 4 — polish & ship.** Passkey unlock; the password generator
+- **Phase 4 — polish & ship.** Passkey unlock (✓ _done_, Chromium; Firefox
+  untested); the password generator
   (✓ _done_: password or passphrase, the web app's options, exact entropy);
   settings (idle timeout, stay-unlocked); Firefox parity; store listing,
   icons, privacy disclosure; a reproducible-build note. Submit to the

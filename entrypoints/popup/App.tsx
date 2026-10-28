@@ -9,6 +9,7 @@ import {
     passwordAlphabet,
     passwordEntropyBits,
 } from '@/lib/password-gen';
+import { isPasskeySupported } from '@/lib/passkey';
 import {
     CLIPBOARD_CLEAR_CHOICES,
     DEFAULT_SETTINGS,
@@ -53,6 +54,20 @@ async function copyWithClear(value: string, clearSeconds: number): Promise<void>
     }
 }
 
+/**
+ * Open the passkey window (entrypoints/passkey). The ceremony cannot run in this
+ * popup: it closes the moment an authenticator prompt takes focus.
+ */
+async function openPasskeyWindow(op: 'enroll' | 'unlock'): Promise<void> {
+    await browser.windows.create({
+        url: browser.runtime.getURL(`/passkey.html#${op}`),
+        type: 'popup',
+        width: 380,
+        height: 340,
+    });
+    window.close();
+}
+
 /** Label for the auto-lock setting — 0 means it never auto-locks. */
 function idleLabel(m: number): string {
     return m === 0 ? 'never' : `${m} min`;
@@ -76,6 +91,16 @@ export function App() {
     const [busy, setBusy] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [confirmingLock, setConfirmingLock] = useState(false);
+    /** This identity has a passkey set up to unlock the vault in this browser. */
+    const [passkey, setPasskey] = useState(false);
+
+    const loadPasskey = useCallback(async () => {
+        try {
+            setPasskey((await send({ kind: 'passkey-status' })).enrolled);
+        } catch {
+            setPasskey(false);
+        }
+    }, []);
 
     const loadEntries = useCallback(async () => {
         setEntries(await send({ kind: 'list-entries' }));
@@ -113,6 +138,7 @@ export function App() {
                     .catch(() => undefined);
                 const s = await send({ kind: 'get-state' });
                 setState(s);
+                if (s.status !== 'signed-out') void loadPasskey();
                 if (s.status === 'unlocked') {
                     await loadEntries();
                     void checkPending();
@@ -186,6 +212,8 @@ export function App() {
             <Shell header={<GenerateLink onClick={() => setView('generate')} />}>
                 <UnlockGate
                     identity={state.identity}
+                    passkey={passkey && isPasskeySupported()}
+                    onPasskey={() => void openPasskeyWindow('unlock')}
                     busy={busy}
                     error={error}
                     settings={settings}
@@ -223,7 +251,19 @@ export function App() {
     if (view === 'settings') {
         return (
             <Shell header={<BackButton onBack={() => setView('list')} />}>
-                <SettingsView settings={settings} onChange={updateSettings} />
+                <SettingsView
+                    settings={settings}
+                    onChange={updateSettings}
+                    passkey={passkey}
+                    onPasskeySetUp={() => void openPasskeyWindow('enroll')}
+                    onPasskeyRemove={async () => {
+                        try {
+                            await send({ kind: 'passkey-forget' });
+                        } finally {
+                            await loadPasskey();
+                        }
+                    }}
+                />
                 {error && <p className="error">{error}</p>}
             </Shell>
         );
@@ -776,12 +816,53 @@ function EntryDetail({
 function SettingsView({
     settings,
     onChange,
+    passkey,
+    onPasskeySetUp,
+    onPasskeyRemove,
 }: {
     settings: Settings;
     onChange: (next: Settings) => void;
+    passkey: boolean;
+    onPasskeySetUp: () => void;
+    onPasskeyRemove: () => void;
 }) {
+    const [confirmingRemove, setConfirmingRemove] = useState(false);
     return (
         <div className="settings">
+            {isPasskeySupported() && (
+                <div className="setting">
+                    <span>unlock with a passkey</span>
+                    {passkey ? (
+                        confirmingRemove ? (
+                            <span className="topbar-actions">
+                                <button
+                                    className="link danger"
+                                    onClick={() => {
+                                        setConfirmingRemove(false);
+                                        onPasskeyRemove();
+                                    }}
+                                >
+                                    remove?
+                                </button>
+                                <button className="link" onClick={() => setConfirmingRemove(false)}>
+                                    cancel
+                                </button>
+                            </span>
+                        ) : (
+                            <span className="topbar-actions">
+                                <span className="passkey-on">on</span>
+                                <button className="link" onClick={() => setConfirmingRemove(true)}>
+                                    remove
+                                </button>
+                            </span>
+                        )
+                    ) : (
+                        <button className="link" onClick={onPasskeySetUp}>
+                            set up
+                        </button>
+                    )}
+                </div>
+            )}
             <div className="setting">
                 <span>auto-lock when idle</span>
                 <select
@@ -848,8 +929,9 @@ function SettingsView({
                 pop up.
             </p>
             <p className="muted">
-                The vault locks whenever the browser suspends the extension; your key is held only
-                in memory, never written to disk.
+                The vault locks on the idle timer, when you lock it, and when the browser closes.
+                Its key is held in memory, never written to disk
+                {passkey ? ' — except sealed to your passkey, which only that passkey opens.' : '.'}
             </p>
         </div>
     );
@@ -857,6 +939,8 @@ function SettingsView({
 
 function UnlockGate({
     identity,
+    passkey,
+    onPasskey,
     busy,
     error,
     settings,
@@ -864,6 +948,8 @@ function UnlockGate({
     onUnlock,
 }: {
     identity: string | null;
+    passkey: boolean;
+    onPasskey: () => void;
     busy: boolean;
     error: string | null;
     settings: Settings;
@@ -883,6 +969,11 @@ function UnlockGate({
                 vault; the passphrase decrypts it — orangecheck never can.
             </p>
             {identity && <p className="who-line">unlocking · {shortDid(identity)}</p>}
+            {passkey && (
+                <button className="btn" type="button" onClick={onPasskey}>
+                    unlock with passkey
+                </button>
+            )}
             <input
                 className="search"
                 type="password"

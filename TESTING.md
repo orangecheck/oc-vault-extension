@@ -76,6 +76,15 @@ OrangeCheck session cookie; a fresh/empty Chrome profile has no session.
     the value follows. Click **copy** → paste it somewhere: it is the value
     shown. Click **passphrase** → six words joined by dashes; **capitalize**
     and **add a number** change it as they say.
+11. **Passkey unlock** (Chrome / Edge / Brave; needs Touch ID, Windows
+    Hello or a security key). Unlocked: **settings** → **unlock with a
+    passkey** → **set up**. A small OC Vault window opens and your browser
+    asks for the passkey → "Passkey unlock is on." Lock the vault, open the
+    popup → **unlock with passkey** → the window asks again → "Unlocked."
+    Open the popup: your entries are there. **settings** → **remove** →
+    **remove?** turns it off. Change your passphrase at vault.ochk.io and
+    try the passkey: it is refused and removed; unlock with the new
+    passphrase and set it up again.
 
 ## 5. After you change code
 
