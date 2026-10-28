@@ -3,6 +3,13 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { VaultEntryFields, VaultEntrySummary, VaultEntryType } from '@/lib/crypto';
 import { send, type PendingCaptureInfo, type VaultState } from '@/lib/messaging';
 import {
+    generatePassphrase,
+    generatePassword,
+    passphraseEntropyBits,
+    passwordAlphabet,
+    passwordEntropyBits,
+} from '@/lib/password-gen';
+import {
     CLIPBOARD_CLEAR_CHOICES,
     DEFAULT_SETTINGS,
     IDLE_LOCK_CHOICES,
@@ -27,7 +34,7 @@ const SECRET_FIELDS = new Set(['password', 'secret', 'key', 'phrase', 'cvv', 'pi
 
 const SIGNIN_URL = 'https://ochk.io/signin?return_to=%2Fvault';
 
-type View = 'list' | 'detail' | 'settings';
+type View = 'list' | 'detail' | 'settings' | 'generate';
 
 /** A compact `did:oc:…` for display. */
 function shortDid(did: string): string {
@@ -154,9 +161,18 @@ export function App() {
         );
     }
 
+    // The generator needs no vault, so it opens whatever the lock state.
+    if (view === 'generate') {
+        return (
+            <Shell header={<BackButton onBack={() => setView('list')} />}>
+                <GeneratorView clearSeconds={settings.clipboardClearSeconds} />
+            </Shell>
+        );
+    }
+
     if (state.status === 'signed-out') {
         return (
-            <Shell>
+            <Shell header={<GenerateLink onClick={() => setView('generate')} />}>
                 <p className="muted">Sign in with your orangecheck account to open your vault.</p>
                 <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
                     sign in at ochk.io
@@ -167,7 +183,7 @@ export function App() {
 
     if (state.status === 'locked') {
         return (
-            <Shell>
+            <Shell header={<GenerateLink onClick={() => setView('generate')} />}>
                 <UnlockGate
                     identity={state.identity}
                     busy={busy}
@@ -236,6 +252,7 @@ export function App() {
             header={
                 <div className="topbar-actions">
                     {syncing && <span className="syncing">syncing…</span>}
+                    <GenerateLink onClick={() => setView('generate')} />
                     <button className="link" onClick={() => setView('settings')}>
                         settings
                     </button>
@@ -455,6 +472,202 @@ function BackButton({ onBack }: { onBack: () => void }) {
     );
 }
 
+function GenerateLink({ onClick }: { onClick: () => void }) {
+    return (
+        <button className="link" onClick={onClick} title="make a strong password">
+            generate
+        </button>
+    );
+}
+
+type GenMode = 'password' | 'passphrase';
+
+interface GenOptions {
+    mode: GenMode;
+    length: number;
+    lowercase: boolean;
+    uppercase: boolean;
+    digits: boolean;
+    symbols: boolean;
+    excludeAmbiguous: boolean;
+    words: number;
+    separator: string;
+    capitalize: boolean;
+    includeNumber: boolean;
+}
+
+/** vault.ochk.io's generator starts at the same place: 20 characters, every class, or 6 words. */
+const GEN_DEFAULTS: GenOptions = {
+    mode: 'password',
+    length: 20,
+    lowercase: true,
+    uppercase: true,
+    digits: true,
+    symbols: true,
+    excludeAmbiguous: false,
+    words: 6,
+    separator: '-',
+    capitalize: false,
+    includeNumber: false,
+};
+
+const SEPARATORS: { value: string; label: string }[] = [
+    { value: '-', label: 'dash' },
+    { value: ' ', label: 'space' },
+    { value: '.', label: 'dot' },
+    { value: '_', label: 'underscore' },
+];
+
+/** A new value for the options, or '' when no character class is on. */
+function generateFor(o: GenOptions): string {
+    if (o.mode === 'passphrase') return generatePassphrase(o);
+    return passwordAlphabet(o).length === 0 ? '' : generatePassword(o);
+}
+
+/**
+ * The password generator. A value is made in this popup from the browser's
+ * secure random source and goes nowhere but the clipboard, on a copy.
+ */
+function GeneratorView({ clearSeconds }: { clearSeconds: number }) {
+    const [opts, setOpts] = useState<GenOptions>(GEN_DEFAULTS);
+    const [value, setValue] = useState(() => generateFor(GEN_DEFAULTS));
+    const [copied, setCopied] = useState(false);
+    const update = (next: GenOptions) => {
+        setOpts(next);
+        setValue(generateFor(next));
+        setCopied(false);
+    };
+    const bits = Math.floor(
+        opts.mode === 'password' ? passwordEntropyBits(opts) : passphraseEntropyBits(opts)
+    );
+    const flag = (
+        key: 'lowercase' | 'uppercase' | 'digits' | 'symbols' | 'excludeAmbiguous',
+        label: string
+    ) => (
+        <div className="setting">
+            <span>{label}</span>
+            <Toggle
+                on={opts[key]}
+                label={label}
+                onClick={() => update({ ...opts, [key]: !opts[key] })}
+            />
+        </div>
+    );
+    return (
+        <div className="generator">
+            <div className="chips">
+                <Chip
+                    label="password"
+                    active={opts.mode === 'password'}
+                    onClick={() => update({ ...opts, mode: 'password' })}
+                />
+                <Chip
+                    label="passphrase"
+                    active={opts.mode === 'passphrase'}
+                    onClick={() => update({ ...opts, mode: 'passphrase' })}
+                />
+            </div>
+            <output className="gen-value" aria-live="polite">
+                {value || '—'}
+            </output>
+            {value ? (
+                <p className="muted gen-strength">
+                    about {bits} bits ·{' '}
+                    {opts.mode === 'password'
+                        ? `${value.length} characters`
+                        : `${opts.words} words`}
+                </p>
+            ) : (
+                <p className="error">Turn on at least one kind of character.</p>
+            )}
+            <div className="gen-actions">
+                <button
+                    className="btn"
+                    disabled={!value}
+                    onClick={async () => {
+                        await copyWithClear(value, clearSeconds);
+                        setCopied(true);
+                    }}
+                >
+                    {copied ? 'copied' : 'copy'}
+                </button>
+                <button className="link" disabled={!value} onClick={() => update(opts)}>
+                    new
+                </button>
+            </div>
+            {opts.mode === 'password' ? (
+                <div className="settings">
+                    <div className="setting">
+                        <span>length {opts.length}</span>
+                        <input
+                            type="range"
+                            min={8}
+                            max={64}
+                            value={opts.length}
+                            aria-label="length"
+                            onChange={(e) => update({ ...opts, length: Number(e.target.value) })}
+                        />
+                    </div>
+                    {flag('lowercase', 'a–z')}
+                    {flag('uppercase', 'A–Z')}
+                    {flag('digits', '0–9')}
+                    {flag('symbols', 'symbols')}
+                    {flag('excludeAmbiguous', 'leave out look-alikes (0 O o 1 l I)')}
+                </div>
+            ) : (
+                <div className="settings">
+                    <div className="setting">
+                        <span>words {opts.words}</span>
+                        <input
+                            type="range"
+                            min={3}
+                            max={10}
+                            value={opts.words}
+                            aria-label="words"
+                            onChange={(e) => update({ ...opts, words: Number(e.target.value) })}
+                        />
+                    </div>
+                    <div className="setting">
+                        <span>between words</span>
+                        <select
+                            value={opts.separator}
+                            onChange={(e) => update({ ...opts, separator: e.target.value })}
+                        >
+                            {SEPARATORS.map((s) => (
+                                <option key={s.label} value={s.value}>
+                                    {s.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <div className="setting">
+                        <span>capitalize</span>
+                        <Toggle
+                            on={opts.capitalize}
+                            label="capitalize"
+                            onClick={() => update({ ...opts, capitalize: !opts.capitalize })}
+                        />
+                    </div>
+                    <div className="setting">
+                        <span>add a number</span>
+                        <Toggle
+                            on={opts.includeNumber}
+                            label="add a number"
+                            onClick={() => update({ ...opts, includeNumber: !opts.includeNumber })}
+                        />
+                    </div>
+                </div>
+            )}
+            <p className="muted">
+                Made in this browser from its secure random source. Nothing is saved or sent;
+                {clearSeconds > 0
+                    ? ` a copy clears from the clipboard after ${clearSeconds}s while this popup stays open.`
+                    : ' a copy stays on the clipboard (clearing is off in settings).'}
+            </p>
+        </div>
+    );
+}
+
 function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
     return (
         <button className={active ? 'chip chip-active' : 'chip'} onClick={onClick}>
@@ -463,12 +676,13 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
     );
 }
 
-function Toggle({ on, onClick }: { on: boolean; onClick: () => void }) {
+function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label?: string }) {
     return (
         <button
             type="button"
             role="switch"
             aria-checked={on}
+            aria-label={label}
             className={on ? 'toggle toggle-on' : 'toggle'}
             onClick={onClick}
         >

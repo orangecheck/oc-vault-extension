@@ -181,7 +181,8 @@ permission: the session cookie rides ordinary `fetch`.
   confirm the worker writes the blob. The pending capture holds a
   password, so it is memory-only — never persisted. Known gap: forms with
   no `<form>` element (a `<div>` + button) are not captured in v1.
-- **Phase 4 — polish & ship.** Passkey unlock; the password generator;
+- **Phase 4 — polish & ship.** Passkey unlock; the password generator
+  (✓ _done_: password or passphrase, the web app's options, exact entropy);
   settings (idle timeout, stay-unlocked); Firefox parity; store listing,
   icons, privacy disclosure; a reproducible-build note. Submit to the
   Chrome Web Store and Firefox Add-ons.

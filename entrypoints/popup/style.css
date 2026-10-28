@@ -426,3 +426,37 @@ select:focus {
 .notice .btn {
     padding: 6px 12px;
 }
+
+/* The password generator. */
+.generator {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.gen-value {
+    display: block;
+    padding: 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    line-height: 1.4;
+    word-break: break-all;
+    user-select: all;
+}
+
+.gen-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.gen-strength {
+    margin-top: -4px;
+}
+
+input[type='range'] {
+    accent-color: var(--primary);
+    width: 140px;
+}

@@ -70,6 +70,12 @@ OrangeCheck session cookie; a fresh/empty Chrome profile has no session.
    there.
 9. **Lock.** Click **lock** in the popup. Re-open it → the unlock gate
    shows. (It also auto-locks after the idle timeout from step 5.)
+10. **Generate.** Click **generate** (top of the popup; it works locked or
+    signed out too). A 20-character password shows with its strength in
+    bits. Switch off **symbols** → a new value with none. Move **length** →
+    the value follows. Click **copy** → paste it somewhere: it is the value
+    shown. Click **passphrase** → six words joined by dashes; **capitalize**
+    and **add a number** change it as they say.
 
 ## 5. After you change code
 
