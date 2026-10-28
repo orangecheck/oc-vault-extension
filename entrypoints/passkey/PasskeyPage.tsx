@@ -3,7 +3,8 @@
  *
  * It is its own small extension window, opened from the toolbar popup, because
  * the popup closes as soon as an authenticator prompt takes focus. The PRF
- * secret the passkey gives goes once to the worker and is zeroed here.
+ * secret the passkey gives goes once to the worker, and its bytes are zeroed
+ * here; the base64 string the message carries cannot be, and lives until GC.
  */
 
 import { useEffect, useRef, useState } from 'react';

@@ -7,16 +7,16 @@ it does.
 
 ## 1. Assets
 
-| Asset                                                          | Sensitivity                                          | Where it is allowed to exist                                           |
-| -------------------------------------------------------------- | ---------------------------------------------------- | ---------------------------------------------------------------------- |
-| Vault key `K` (32 bytes)                                       | critical                                             | service-worker memory + `storage.session` (RAM, never disk), unlocked  |
-| Vault passphrase                                               | critical                                             | in transit through the popup → worker, then discarded                  |
-| Passkey PRF secret (32 bytes)                                  | critical                                             | in transit from the passkey window to the worker, then zeroed          |
-| `K` sealed to a passkey (opt-in)                               | ciphertext; opens only with the passkey's PRF secret | `storage.local`, one per identity, while passkey unlock is on          |
-| Decrypted entry fields (passwords, seed phrases, TOTP secrets) | critical                                             | worker memory, transiently; one field in a content script at fill time |
-| Ciphertext blobs                                               | low (server already holds them)                      | may be cached in `chrome.storage.local`                                |
-| Entry metadata index (names, types, origins)                   | moderate                                             | worker memory; popup, while open                                       |
-| The `oc_session` cookie                                        | high                                                 | the browser's cookie store; never read by extension code               |
+| Asset                                                          | Sensitivity                                          | Where it is allowed to exist                                            |
+| -------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------- |
+| Vault key `K` (32 bytes)                                       | critical                                             | service-worker memory + `storage.session` (RAM, never disk), unlocked   |
+| Vault passphrase                                               | critical                                             | in transit through the popup → worker, then discarded                   |
+| Passkey PRF secret (32 bytes)                                  | critical                                             | in transit from the passkey window to the worker; its bytes then zeroed |
+| `K` sealed to a passkey (opt-in)                               | ciphertext; opens only with the passkey's PRF secret | `storage.local`, one per identity, while passkey unlock is on           |
+| Decrypted entry fields (passwords, seed phrases, TOTP secrets) | critical                                             | worker memory, transiently; one field in a content script at fill time  |
+| Ciphertext blobs                                               | low (server already holds them)                      | may be cached in `chrome.storage.local`                                 |
+| Entry metadata index (names, types, origins)                   | moderate                                             | worker memory; popup, while open                                        |
+| The `oc_session` cookie                                        | high                                                 | the browser's cookie store; never read by extension code                |
 
 ## 2. Trust boundaries
 
@@ -144,9 +144,11 @@ simply has no matching entry. Phishing resistance is structural.
 - **Passkey unlock** (`lib/passkey.ts`, opt-in) — the passkey belongs to
   this extension (its relying party is the extension's own origin) and
   unlocks only behind the authenticator's user verification. Its PRF secret
-  is never stored: the passkey window reads it, hands it once to the worker
-  — an extension-page-only request, refused from a content script — and
-  zeroes it. A disk image finds only the seal, which needs a secret only the
+  is never stored: the passkey window reads it and hands it once to the
+  worker — an extension-page-only request, refused from a content script.
+  Both sides zero its bytes once used (`useSecret`, tested), also on an
+  error; the base64 strings that carried it cannot be zeroed and live until
+  garbage collection. A disk image finds only the seal, which needs a secret only the
   authenticator yields, behind a gesture. The seal is bound to the signed-in
   identity and to a fingerprint of the escrowed `WrappedKey` it came from:
   if the escrow changes (a new passphrase or a new key), the passkey is

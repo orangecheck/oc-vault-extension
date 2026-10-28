@@ -97,6 +97,31 @@ export function unwrapUnderPrf(w: KeyUnderPasskey, prfSecret: Uint8Array): Uint8
     }
 }
 
+/** A b64url value from a message, decoded to exactly `len` bytes, or a refusal. */
+export function exactBytes(value: unknown, len: number, what: string): Uint8Array {
+    try {
+        const out = typeof value === 'string' ? b64urlDecode(value) : null;
+        if (out && out.length === len) return out;
+    } catch {
+        // fall through
+    }
+    throw new Error(`malformed ${what}`);
+}
+
+/**
+ * Lend a 32-byte b64url secret's bytes to `use`, then zero them — also when
+ * `use` throws. The message string it arrived in cannot be zeroed; it lives
+ * until garbage collection.
+ */
+export function useSecret<T>(value: unknown, what: string, use: (bytes: Uint8Array) => T): T {
+    const bytes = exactBytes(value, 32, what);
+    try {
+        return use(bytes);
+    } finally {
+        bytes.fill(0);
+    }
+}
+
 /* ── storage.local: one record per identity ─────────────────────────────── */
 
 async function readAll(): Promise<Record<string, PasskeyRecord>> {

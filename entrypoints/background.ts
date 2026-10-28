@@ -13,7 +13,6 @@
  */
 
 import { readBlobCache, writeBlobCache, type CachedBlob } from '@/lib/cache';
-import { b64urlDecode } from '@orangecheck/lock-crypto';
 import {
     decryptFields,
     encryptFields,
@@ -36,9 +35,11 @@ import { admit, callerOf, NotAllowed, type Caller } from '@/lib/sender';
 import { entryMatchesPage, matchEntryToPage } from '@orangecheck/vault-core';
 import {
     escrowFingerprint,
+    exactBytes,
     forgetPasskey,
     readPasskey,
     unwrapUnderPrf,
+    useSecret,
     wrapUnderPrf,
     writePasskey,
 } from '@/lib/passkey';
@@ -61,17 +62,6 @@ const PENDING_SLOT = 'oc-pending-capture';
 /** storage.session slot naming the escrowed wrap the held key came from
  *  (lib/passkey `escrowFingerprint`) — not a secret; RAM-only like the key. */
 const KEY_ESCROW_SLOT = 'oc-key-escrow';
-
-/** A b64url value from a message, decoded to exactly `len` bytes, or a refusal. */
-function bytesOf(value: unknown, len: number, what: string): Uint8Array {
-    try {
-        const out = typeof value === 'string' ? b64urlDecode(value) : null;
-        if (out && out.length === len) return out;
-    } catch {
-        // fall through
-    }
-    throw new Error(`malformed ${what}`);
-}
 
 /** A login the user just submitted, awaiting a save/update confirmation.
  *  Holds a password → in-memory only, never persisted (SECURITY.md §3). */
@@ -318,19 +308,18 @@ export default defineBackground(() => {
         // A key restored from an older session has no escrow on record; one
         // passphrase unlock names it, so a passkey never wraps a key of unknown origin.
         if (!keyEscrow) throw new Error('lock, then unlock with your passphrase once, first');
-        const secret = bytesOf(m.prfSecret, 32, 'passkey secret');
-        bytesOf(m.prfSalt, 32, 'passkey salt');
+        exactBytes(m.prfSalt, 32, 'passkey salt');
         if (typeof m.credentialId !== 'string' || !m.credentialId) {
             throw new Error('malformed passkey id');
         }
+        const held = key;
         const record = {
             credentialId: m.credentialId,
             prfSalt: m.prfSalt,
-            wrapped: wrapUnderPrf(key, secret),
+            wrapped: useSecret(m.prfSecret, 'passkey secret', (s) => wrapUnderPrf(held, s)),
             escrow: keyEscrow,
             createdAt: new Date().toISOString(),
         };
-        secret.fill(0);
         await writePasskey(identity, record);
         return { enrolled: true as const };
     }
@@ -350,9 +339,9 @@ export default defineBackground(() => {
                 'Your vault passphrase or key changed since this passkey was set up. Unlock with your passphrase, then set the passkey up again in settings.'
             );
         }
-        const secret = bytesOf(m.prfSecret, 32, 'passkey secret');
-        const unwrapped = unwrapUnderPrf(record.wrapped, secret);
-        secret.fill(0);
+        const unwrapped = useSecret(m.prfSecret, 'passkey secret', (s) =>
+            unwrapUnderPrf(record.wrapped, s)
+        );
         if (!unwrapped)
             throw new Error("That passkey didn't unlock this vault. Use your passphrase.");
         key = unwrapped;
