@@ -60,8 +60,9 @@ Any other sender, such as another extension, is refused.
    After the user clicks the affordance (a gesture) it receives the
    **origin-matched summaries** for this page — names / types / urls, no
    secret — to render the picker; on a pick it receives that one entry's
-   requested field **values**. Nothing else, ever — no unmatched entry, no
-   unpicked entry's secret.
+   **username and password**, the only fields a fill may name (the worker
+   refuses any other, a login's TOTP seed included). Nothing else, ever — no
+   unmatched entry, no unpicked entry's secret.
 3. **No plaintext secret at rest.** The disk-backed stores —
    `storage.local` and IndexedDB — hold only ciphertext (the blob cache, the
    passkey seal) and non-secret settings. The exceptions are `K` and an in-flight pending-capture

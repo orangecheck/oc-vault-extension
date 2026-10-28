@@ -56,6 +56,8 @@ import {
 import { loadSettings, saveSettings, type Settings } from '@/lib/settings';
 
 const IDLE_ALARM = 'oc-idle-lock';
+/** The only fields a fill may carry into a page. A login's TOTP seed is never one. */
+const FILLABLE: ReadonlySet<string> = new Set(['username', 'password']);
 const CAPTURE_TTL_MS = 2 * 60_000;
 /** storage.session slot for the pending capture — RAM-only, survives a
  *  worker restart so a save prompt is not lost (SECURITY.md §3). */
@@ -515,6 +517,12 @@ export default defineBackground(() => {
                 // another entry (SECURITY.md §3, invariant 2). And only into a
                 // page the entry is for: match-page's rule, applied to the sender.
                 if (caller.kind !== 'page') throw new NotAllowed('fill-values comes from a page');
+                if (
+                    !Array.isArray(message.fields) ||
+                    !message.fields.every((f) => FILLABLE.has(f))
+                ) {
+                    throw new NotAllowed('only a username and password fill a page');
+                }
                 const entry = entries.find((e) => e.id === message.entryId);
                 if (!entry) throw new Error('entry not found');
                 const all = fieldsOf(entry);
