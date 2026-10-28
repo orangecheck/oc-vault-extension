@@ -298,6 +298,23 @@ export default defineBackground(() => {
         return restorePromise;
     }
 
+    /**
+     * Open the vault with `k`, which came from the escrowed wrap `escrowFp` names.
+     * The idle lock is armed before the key is held, so whatever fails after (a
+     * storage write), an open vault always has its timer.
+     */
+    async function openWith(k: Uint8Array, escrowFp: string): Promise<VaultState> {
+        await armIdleLock();
+        key = k;
+        await holdEscrow(escrowFp);
+        // Mirror the key so it survives worker restarts (PLAN.md §7).
+        await persistSessionKey(k);
+        // Instant first paint from the ciphertext cache; the popup follows up
+        // with a 'sync' to refresh from the server.
+        entries = indexFromBlobs(await readBlobCache());
+        return state('unlocked');
+    }
+
     /** Note which escrowed wrap the held key came from, in memory and storage.session. */
     async function holdEscrow(fp: string): Promise<void> {
         keyEscrow = fp;
@@ -348,12 +365,7 @@ export default defineBackground(() => {
         );
         if (!unwrapped)
             throw new Error("That passkey didn't unlock this vault. Use your passphrase.");
-        key = unwrapped;
-        await holdEscrow(record.escrow);
-        await persistSessionKey(key);
-        await armIdleLock();
-        entries = indexFromBlobs(await readBlobCache());
-        return state('unlocked');
+        return openWith(unwrapped, record.escrow);
     }
 
     /** A page may save or dismiss only a capture made on its own site. */
@@ -390,15 +402,10 @@ export default defineBackground(() => {
                 const escrow = await fetchEscrow();
                 if (!escrow) throw new Error('no vault to unlock — set one up at vault.ochk.io');
                 // unwrapVaultKey throws WrongPassphrase on a bad passphrase.
-                key = unwrapVaultKey(escrow, message.passphrase);
-                await holdEscrow(escrowFingerprint(escrow));
-                // Mirror the key so it survives worker restarts (PLAN.md §7).
-                await persistSessionKey(key);
-                await armIdleLock();
-                // Instant first paint from the ciphertext cache; the popup
-                // follows up with a 'sync' to refresh from the server.
-                entries = indexFromBlobs(await readBlobCache());
-                return state('unlocked');
+                return openWith(
+                    unwrapVaultKey(escrow, message.passphrase),
+                    escrowFingerprint(escrow)
+                );
             }
 
             case 'lock':
