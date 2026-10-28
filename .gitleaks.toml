@@ -1,0 +1,14 @@
+# gitleaks (CI's first step) reads this from the repository root. Every default
+# rule still applies; the allowlist names published test vectors only, never a
+# real secret.
+title = "oc-vault-extension"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Published test vectors"
+regexes = [
+    # RFC 6238 Appendix B's SHA-1 seed, "12345678901234567890" in base32 (lib/totp.test.mjs).
+    '''GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ''',
+]
