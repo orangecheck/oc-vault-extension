@@ -11,6 +11,7 @@
 
 import type { VaultEntryFields, VaultEntrySummary } from './crypto';
 import type { PasskeyTarget } from './passkey';
+import type { TotpNow } from './totp';
 import type { Settings } from './settings';
 
 /** The worker's lock state, safe to share with any surface. */
@@ -43,6 +44,8 @@ export type Message =
     | { kind: 'reveal-field'; entryId: string; field: string }
     /** Popup-only: reveal every decrypted field of one entry (detail view). */
     | { kind: 'reveal-entry'; entryId: string }
+    /** Popup-only: the entry's current TOTP code, made in the worker. Never stored. */
+    | { kind: 'totp-code'; entryId: string }
     | { kind: 'get-settings' }
     | { kind: 'set-settings'; settings: Settings }
     /** Content-script: which entries match this page (summaries only). */
@@ -104,6 +107,7 @@ export interface ReplyData {
     'list-entries': VaultEntrySummary[];
     'reveal-field': { value: string };
     'reveal-entry': { fields: VaultEntryFields };
+    'totp-code': TotpNow;
     'get-settings': Settings;
     'set-settings': Settings;
     'match-page': VaultEntrySummary[];

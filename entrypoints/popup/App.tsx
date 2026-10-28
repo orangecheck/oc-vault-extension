@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { VaultEntryFields, VaultEntrySummary, VaultEntryType } from '@/lib/crypto';
+import type { TotpNow } from '@/lib/totp';
 import { send, type PendingCaptureInfo, type VaultState } from '@/lib/messaging';
 import {
     generatePassphrase,
@@ -31,7 +32,17 @@ const PRIMARY_FIELD: Record<VaultEntryType, string> = {
 };
 
 /** Field names whose value is masked until the user reveals it. */
-const SECRET_FIELDS = new Set(['password', 'secret', 'key', 'phrase', 'cvv', 'pin', 'privateKey']);
+const SECRET_FIELDS = new Set([
+    'password',
+    'secret',
+    'key',
+    'phrase',
+    'cvv',
+    'pin',
+    'privateKey',
+    // A login's TOTP seed.
+    'totp',
+]);
 
 const SIGNIN_URL = 'https://ochk.io/signin?return_to=%2Fvault';
 
@@ -400,15 +411,26 @@ export function App() {
                         </div>
                         <button
                             className="copy"
-                            title="copy the primary value"
+                            title={
+                                entry.type === 'totp'
+                                    ? 'copy the current code'
+                                    : 'copy the primary value'
+                            }
                             onClick={async (e) => {
                                 e.stopPropagation();
                                 try {
-                                    const { value } = await send({
-                                        kind: 'reveal-field',
-                                        entryId: entry.id,
-                                        field: PRIMARY_FIELD[entry.type],
-                                    });
+                                    // A TOTP entry copies its current code, never its secret.
+                                    const value =
+                                        entry.type === 'totp'
+                                            ? (await send({ kind: 'totp-code', entryId: entry.id }))
+                                                  .code
+                                            : (
+                                                  await send({
+                                                      kind: 'reveal-field',
+                                                      entryId: entry.id,
+                                                      field: PRIMARY_FIELD[entry.type],
+                                                  })
+                                              ).value;
                                     await copyWithClear(value, settings.clipboardClearSeconds);
                                     setError(null);
                                 } catch {
@@ -769,6 +791,17 @@ function EntryDetail({
                 <span className="entry-type">{summary.type}</span>
             </div>
             {!fields && <p className="muted">decrypting…</p>}
+            {fields &&
+                (summary.type === 'totp' ||
+                    (summary.type === 'password' &&
+                        typeof fields.totp === 'string' &&
+                        fields.totp.length > 0)) && (
+                    <TotpCodeView
+                        entryId={summary.id}
+                        clearSeconds={clearSeconds}
+                        onError={onError}
+                    />
+                )}
             <ul className="fields">
                 {rows.map(([name, value]) => {
                     const secret = SECRET_FIELDS.has(name);
@@ -809,6 +842,81 @@ function EntryDetail({
                     );
                 })}
             </ul>
+        </div>
+    );
+}
+
+/** "123456" → "123 456": a code read off the screen in two halves. */
+function groupCode(code: string): string {
+    const half = Math.floor(code.length / 2);
+    return `${code.slice(0, half)} ${code.slice(half)}`;
+}
+
+/**
+ * The entry's live TOTP code and the seconds it has left. The worker makes each
+ * code from the secret it holds; the popup asks again when the period turns.
+ * A code is copied only on a click, and nothing here is stored.
+ */
+function TotpCodeView({
+    entryId,
+    clearSeconds,
+    onError,
+}: {
+    entryId: string;
+    clearSeconds: number;
+    onError: (message: string | null) => void;
+}) {
+    const [now, setNow] = useState<TotpNow | null>(null);
+    const [left, setLeft] = useState(0);
+    const [copied, setCopied] = useState(false);
+    const [failed, setFailed] = useState<string | null>(null);
+
+    useEffect(() => {
+        let alive = true;
+        let next: ReturnType<typeof setTimeout> | undefined;
+        const load = async () => {
+            try {
+                const r = await send({ kind: 'totp-code', entryId });
+                if (!alive) return;
+                setNow(r);
+                setLeft(r.remaining);
+                setCopied(false);
+                next = setTimeout(() => void load(), r.remaining * 1000 + 50);
+            } catch (err) {
+                if (alive) setFailed(err instanceof Error ? err.message : 'no code');
+            }
+        };
+        void load();
+        const tick = setInterval(() => setLeft((l) => Math.max(0, l - 1)), 1000);
+        return () => {
+            alive = false;
+            if (next) clearTimeout(next);
+            clearInterval(tick);
+        };
+    }, [entryId]);
+
+    if (failed) return <p className="error">{failed}</p>;
+    return (
+        <div className="totp">
+            <span className="field-name">code</span>
+            <output className="totp-code" aria-live="polite">
+                {now ? groupCode(now.code) : '··· ···'}
+            </output>
+            <span className="totp-left" title="seconds until the next code">
+                {now ? `${left}s` : ''}
+            </span>
+            <button
+                className="copy"
+                disabled={!now}
+                onClick={async () => {
+                    if (!now) return;
+                    await copyWithClear(now.code, clearSeconds);
+                    setCopied(true);
+                    onError(null);
+                }}
+            >
+                {copied ? 'copied' : 'copy'}
+            </button>
         </div>
     );
 }

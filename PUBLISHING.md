@@ -132,10 +132,13 @@ they belong to.
   it was saved on, so look-alike phishing domains simply get nothing.
 • Capture as you go. Log in somewhere new and OC Vault offers to save
   it; an unchanged password is never re-prompted.
-• Live TOTP. Authenticator codes rotate in the popup and copy with one
-  click.
-• Locks itself. The vault re-locks when idle and whenever the browser
-  suspends the extension. The key never touches disk.
+• Live TOTP codes. A TOTP entry, or a login that carries one, shows its
+  current code and the seconds it has left in the popup; copy takes the
+  code, never the secret.
+• Locks itself. The vault locks after the idle time you choose, when you
+  lock it, and when the browser closes. The key never touches disk in the
+  clear; with passkey unlock on, a copy sealed to your passkey is kept in
+  this browser, and only that passkey opens it.
 • No account here, no second vault. The same vault as vault.ochk.io —
   set up, billing, and recovery live there. Sign in with your Bitcoin
   wallet (BIP-322) or with email-OTP.
@@ -250,7 +253,8 @@ do not block submission.
 
 ## 7. Open items before v1.0
 
-Tracked in `PLAN.md` §9 (Phase 4): passkey unlock, the password
-generator, "stay unlocked", the full Public Suffix List, and a
-reproducible-build attestation. None block a `0.1.0` beta submission, but
-the PSL swap should land before a `1.0` that markets phishing resistance.
+Done in Phase 4: passkey unlock, the password generator, "stay unlocked",
+and live TOTP codes. Still open, tracked in `PLAN.md` §9: the full Public
+Suffix List and a reproducible-build attestation. Neither blocks a `0.1.0`
+beta submission, but the PSL swap should land before a `1.0` that markets
+phishing resistance.

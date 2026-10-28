@@ -472,3 +472,29 @@ input[type='range'] {
     font-size: 12px;
     line-height: 1.5;
 }
+
+/* A live TOTP code. */
+.totp {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    margin-bottom: 10px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+}
+
+.totp-code {
+    flex: 1;
+    font-size: 20px;
+    letter-spacing: 0.08em;
+    color: var(--fg);
+}
+
+.totp-left {
+    font-size: 11px;
+    color: var(--muted);
+    min-width: 28px;
+    text-align: right;
+}

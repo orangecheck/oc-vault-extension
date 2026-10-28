@@ -188,6 +188,7 @@ permission: the session cookie rides ordinary `fetch`.
 - **Phase 4 — polish & ship.** Passkey unlock (✓ _done_, Chromium; Firefox
   untested); the password generator
   (✓ _done_: password or passphrase, the web app's options, exact entropy);
+  live TOTP codes in the popup (✓ _done_, from vault-core's `totp()`);
   settings (idle timeout, stay-unlocked); Firefox parity; store listing,
   icons, privacy disclosure; a reproducible-build note. Submit to the
   Chrome Web Store and Firefox Add-ons.

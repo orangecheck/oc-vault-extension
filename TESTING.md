@@ -85,6 +85,11 @@ OrangeCheck session cookie; a fresh/empty Chrome profile has no session.
     **remove?** turns it off. Change your passphrase at vault.ochk.io and
     try the passkey: it is refused and removed; unlock with the new
     passphrase and set it up again.
+12. **Live TOTP.** Click a TOTP entry (or a login that has a TOTP): a
+    6-digit code shows with the seconds it has left, and it matches your
+    phone's authenticator for the same secret. Wait for it to roll over:
+    a new code. **copy** in the code box, or **copy** on the entry in the
+    list, puts the code (not the secret) on the clipboard.
 
 ## 5. After you change code
 

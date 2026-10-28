@@ -82,6 +82,7 @@ lib/
   passkey.ts        passkey unlock: the PRF ceremonies and the key seal (Phase 4)
   password-gen.ts   the password / passphrase generator (Phase 4)
   picker.ts         what the autofill menu shows, from the worker's answers
+  totp.ts           live TOTP codes from an entry's secret (vault-core's totp)
 ```
 
 ## Relationship to the family

@@ -44,6 +44,7 @@ import {
     writePasskey,
 } from '@/lib/passkey';
 import { clearSessionKey, persistSessionKey, restoreSessionKey } from '@/lib/session-key';
+import { codeAt, totpSourceOf } from '@/lib/totp';
 import {
     fetchBlobs,
     fetchEscrow,
@@ -449,6 +450,20 @@ export default defineBackground(() => {
                 const entry = entries.find((e) => e.id === message.entryId);
                 if (!entry) throw new Error('entry not found');
                 return { fields: fieldsOf(entry) };
+            }
+
+            case 'totp-code': {
+                // The code is made here from the decrypted secret and goes back to
+                // the popup only; neither is stored or logged.
+                const entry = entries.find((e) => e.id === message.entryId);
+                if (!entry) throw new Error('entry not found');
+                const source = totpSourceOf(entry.type, fieldsOf(entry));
+                if (!source) throw new Error('this entry has no TOTP secret');
+                try {
+                    return codeAt(source, Date.now());
+                } catch {
+                    throw new Error("this entry's TOTP secret is not valid base32");
+                }
             }
 
             case 'get-settings':

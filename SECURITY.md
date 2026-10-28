@@ -157,6 +157,12 @@ simply has no matching entry. Phishing resistance is structural.
   session, with no escrow on record, cannot be sealed until one passphrase
   unlock names its escrow. The ceremony runs in its own extension window,
   not the popup, which closes when an authenticator prompt takes focus.
+- **Live TOTP codes** (`lib/totp.ts`) — a code is made in the worker from
+  the decrypted secret, with vault-core's RFC 6238 `totp()`, and answers the
+  popup only (`totp-code`, an extension-page request; a content script is
+  refused). It reaches the clipboard only on a click and is never stored or
+  logged. Copying a TOTP entry from the list copies the code, not the
+  secret, and the detail view masks the secret and a login's `totp` seed.
 - **Brute-force of the escrowed `WrappedKey`** — inherited from oc-vault:
   scrypt N=2^17 plus a generated high-entropy passphrase. The extension
   adds no new brute-force surface.
