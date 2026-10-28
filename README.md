@@ -81,6 +81,7 @@ lib/
   forms.ts          login-form heuristics (Phase 2)
   passkey.ts        passkey unlock: the PRF ceremonies and the key seal (Phase 4)
   password-gen.ts   the password / passphrase generator (Phase 4)
+  picker.ts         what the autofill menu shows, from the worker's answers
 ```
 
 ## Relationship to the family

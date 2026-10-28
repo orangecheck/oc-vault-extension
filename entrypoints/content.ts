@@ -14,6 +14,7 @@
 import type { VaultEntrySummary } from '@/lib/crypto';
 import { detectLoginForms, type LoginForm } from '@/lib/forms';
 import { send } from '@/lib/messaging';
+import { afterMatches, afterState, onFailure, type PickerOutcome } from '@/lib/picker';
 
 const ORANGE = '#ea580c';
 const Z = '2147483646';
@@ -205,43 +206,23 @@ export default defineContentScript({
             const p = panel(root);
             const loading = auto ? null : panelMessage(p, 'checking your vault…');
             const superseded = () => picker !== host;
+            // lib/picker.ts decides; this only draws its answer.
+            const show = (o: PickerOutcome): void => {
+                if (o.kind === 'close') return closePicker();
+                loading?.remove();
+                if (o.kind === 'message') panelMessage(p, o.text);
+                else renderMatches(p, o.matches, form);
+            };
             try {
                 const state = await send({ kind: 'get-state' });
                 if (superseded()) return;
-                if (state.status !== 'unlocked') {
-                    if (auto) return closePicker();
-                    loading?.remove();
-                    panelMessage(
-                        p,
-                        'OC Vault is locked — click the OC icon in your browser toolbar to unlock it.'
-                    );
-                    return;
-                }
-                if (state.entryCount === 0) {
-                    if (auto) return closePicker();
-                    loading?.remove();
-                    panelMessage(
-                        p,
-                        'No entries synced yet — open the OC toolbar icon to check your vault.'
-                    );
-                    return;
-                }
+                const next = afterState(state, auto);
+                if (next !== 'ask') return show(next);
                 const matches = await send({ kind: 'match-page', pageUrl: location.href });
                 if (superseded()) return;
-                if (matches.length === 0) {
-                    if (auto) return closePicker();
-                    loading?.remove();
-                    panelMessage(p, 'No saved logins for this site.');
-                    return;
-                }
-                // Auto-opened, but focus has since moved on — don't pop up.
-                if (auto && affordanceField !== anchor) return closePicker();
-                loading?.remove();
-                renderMatches(p, matches, form);
+                show(afterMatches(matches, auto, affordanceField === anchor));
             } catch {
-                if (auto) return closePicker();
-                loading?.remove();
-                panelMessage(p, 'Could not reach the vault.');
+                if (!superseded()) show(onFailure(auto));
             }
         }
 
