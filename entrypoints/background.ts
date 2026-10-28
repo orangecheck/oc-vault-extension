@@ -44,7 +44,7 @@ import {
     writePasskey,
 } from '@/lib/passkey';
 import { clearSessionKey, persistSessionKey, restoreSessionKey } from '@/lib/session-key';
-import { codeAt, totpSourceOf } from '@/lib/totp';
+import { codeAt, totpSourceOf, withheldFields } from '@/lib/totp';
 import {
     fetchBlobs,
     fetchEscrow,
@@ -307,12 +307,18 @@ export default defineBackground(() => {
     async function openWith(k: Uint8Array, escrowFp: string): Promise<VaultState> {
         await armIdleLock();
         key = k;
-        await holdEscrow(escrowFp);
-        // Mirror the key so it survives worker restarts (PLAN.md §7).
-        await persistSessionKey(k);
-        // Instant first paint from the ciphertext cache; the popup follows up
-        // with a 'sync' to refresh from the server.
-        entries = indexFromBlobs(await readBlobCache());
+        try {
+            await holdEscrow(escrowFp);
+            // Mirror the key so it survives worker restarts (PLAN.md §7).
+            await persistSessionKey(k);
+            // Instant first paint from the ciphertext cache; the popup follows
+            // up with a 'sync' to refresh from the server.
+            entries = indexFromBlobs(await readBlobCache());
+        } catch (err) {
+            // Half open is not open: drop the key and its timer, and say why.
+            lock();
+            throw err;
+        }
         return state('unlocked');
     }
 
@@ -449,7 +455,14 @@ export default defineBackground(() => {
             case 'reveal-entry': {
                 const entry = entries.find((e) => e.id === message.entryId);
                 if (!entry) throw new Error('entry not found');
-                return { fields: fieldsOf(entry) };
+                // A TOTP secret stays here until the person asks for it by name.
+                const fields: VaultEntryFields = { ...fieldsOf(entry) };
+                const held: string[] = [];
+                for (const name of withheldFields(entry.type)) {
+                    if (typeof fields[name] === 'string' && fields[name]) held.push(name);
+                    delete fields[name];
+                }
+                return { fields, held };
             }
 
             case 'totp-code': {

@@ -55,6 +55,14 @@ export function totpSourceOf(type: VaultEntryType, fields: VaultEntryFields): To
     return { secret: f.secret, digits, period };
 }
 
+/**
+ * The fields an entry's detail view leaves out, sent only on an explicit show or
+ * copy: a TOTP entry's secret and a login's TOTP seed. The code box needs neither.
+ */
+export function withheldFields(type: VaultEntryType): string[] {
+    return type === 'totp' ? ['secret'] : type === 'password' ? ['totp'] : [];
+}
+
 /** The code for `src` at `nowMs`. Throws when the secret is not base32 or is empty. */
 export function codeAt(src: TotpSource, nowMs: number): TotpNow {
     if (base32Decode(src.secret).length === 0) throw new Error('this entry has no TOTP secret');

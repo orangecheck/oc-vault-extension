@@ -106,7 +106,8 @@ export interface ReplyData {
     sync: VaultState;
     'list-entries': VaultEntrySummary[];
     'reveal-field': { value: string };
-    'reveal-entry': { fields: VaultEntryFields };
+    /** `held` names the fields left out (lib/totp `withheldFields`); fetch each with reveal-field. */
+    'reveal-entry': { fields: VaultEntryFields; held: string[] };
     'totp-code': TotpNow;
     'get-settings': Settings;
     'set-settings': Settings;

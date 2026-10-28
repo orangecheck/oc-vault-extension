@@ -7,16 +7,16 @@ it does.
 
 ## 1. Assets
 
-| Asset                                                          | Sensitivity                                          | Where it is allowed to exist                                            |
-| -------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------------- |
-| Vault key `K` (32 bytes)                                       | critical                                             | service-worker memory + `storage.session` (RAM, never disk), unlocked   |
-| Vault passphrase                                               | critical                                             | in transit through the popup → worker, then discarded                   |
-| Passkey PRF secret (32 bytes)                                  | critical                                             | in transit from the passkey window to the worker; its bytes then zeroed |
-| `K` sealed to a passkey (opt-in)                               | ciphertext; opens only with the passkey's PRF secret | `storage.local`, one per identity, while passkey unlock is on           |
-| Decrypted entry fields (passwords, seed phrases, TOTP secrets) | critical                                             | worker memory, transiently; one field in a content script at fill time  |
-| Ciphertext blobs                                               | low (server already holds them)                      | may be cached in `chrome.storage.local`                                 |
-| Entry metadata index (names, types, origins)                   | moderate                                             | worker memory; popup, while open                                        |
-| The `oc_session` cookie                                        | high                                                 | the browser's cookie store; never read by extension code                |
+| Asset                                                          | Sensitivity                                          | Where it is allowed to exist                                                                                                                                                                                                          |
+| -------------------------------------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vault key `K` (32 bytes)                                       | critical                                             | service-worker memory + `storage.session` (RAM, never disk), unlocked                                                                                                                                                                 |
+| Vault passphrase                                               | critical                                             | in transit through the popup → worker, then discarded                                                                                                                                                                                 |
+| Passkey PRF secret (32 bytes)                                  | critical                                             | in transit from the passkey window to the worker; its bytes then zeroed                                                                                                                                                               |
+| `K` sealed to a passkey (opt-in)                               | ciphertext; opens only with the passkey's PRF secret | `storage.local`, one per identity, while passkey unlock is on                                                                                                                                                                         |
+| Decrypted entry fields (passwords, seed phrases, TOTP secrets) | critical                                             | worker memory, transiently; the popup while one entry's detail is open (its fields, without a TOTP secret or a login's TOTP seed, which reach the popup only on an explicit show or copy); one field in a content script at fill time |
+| Ciphertext blobs                                               | low (server already holds them)                      | may be cached in `chrome.storage.local`                                                                                                                                                                                               |
+| Entry metadata index (names, types, origins)                   | moderate                                             | worker memory; popup, while open                                                                                                                                                                                                      |
+| The `oc_session` cookie                                        | high                                                 | the browser's cookie store; never read by extension code                                                                                                                                                                              |
 
 ## 2. Trust boundaries
 
@@ -162,7 +162,13 @@ simply has no matching entry. Phishing resistance is structural.
   popup only (`totp-code`, an extension-page request; a content script is
   refused). It reaches the clipboard only on a click and is never stored or
   logged. Copying a TOTP entry from the list copies the code, not the
-  secret, and the detail view masks the secret and a login's `totp` seed.
+  secret. The detail view's fetch leaves the secret and a login's `totp`
+  seed out (`withheldFields`); each is sent only when the person clicks show
+  or copy on it, and the code box needs neither.
+- **An unlock that fails part-way locks again.** The idle lock is armed
+  before the key is held; if a storage write then fails, the key and its
+  timer are dropped and the unlock reports the failure, so the vault is
+  never left open by an unlock that said it failed.
 - **Brute-force of the escrowed `WrappedKey`** — inherited from oc-vault:
   scrypt N=2^17 plus a generated high-entropy passphrase. The extension
   adds no new brute-force surface.

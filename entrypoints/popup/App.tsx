@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import type { VaultEntryFields, VaultEntrySummary, VaultEntryType } from '@/lib/crypto';
+import { copyRequest } from '@/lib/copy';
 import type { TotpNow } from '@/lib/totp';
 import { send, type PendingCaptureInfo, type VaultState } from '@/lib/messaging';
 import {
@@ -17,19 +18,6 @@ import {
     IDLE_LOCK_CHOICES,
     type Settings,
 } from '@/lib/settings';
-
-/** The decrypted field to copy for each entry type — the "primary" secret. */
-const PRIMARY_FIELD: Record<VaultEntryType, string> = {
-    password: 'password',
-    note: 'body',
-    'seed-phrase': 'phrase',
-    totp: 'secret',
-    'api-key': 'key',
-    kv: 'value',
-    card: 'number',
-    identity: 'email',
-    file: 'filename',
-};
 
 /** Field names whose value is masked until the user reveals it. */
 const SECRET_FIELDS = new Set([
@@ -420,15 +408,16 @@ export function App() {
                                 e.stopPropagation();
                                 try {
                                     // A TOTP entry copies its current code, never its secret.
+                                    const ask = copyRequest(entry.type);
                                     const value =
-                                        entry.type === 'totp'
+                                        ask.kind === 'totp-code'
                                             ? (await send({ kind: 'totp-code', entryId: entry.id }))
                                                   .code
                                             : (
                                                   await send({
                                                       kind: 'reveal-field',
                                                       entryId: entry.id,
-                                                      field: PRIMARY_FIELD[entry.type],
+                                                      field: ask.field,
                                                   })
                                               ).value;
                                     await copyWithClear(value, settings.clipboardClearSeconds);
@@ -763,26 +752,39 @@ function EntryDetail({
     onError: (message: string | null) => void;
 }) {
     const [fields, setFields] = useState<VaultEntryFields | null>(null);
+    /** Fields the worker left out (a TOTP secret); each is fetched only on show or copy. */
+    const [held, setHeld] = useState<string[]>([]);
+    /** Held fields the person asked to see, by name. */
+    const [fetched, setFetched] = useState<Record<string, string>>({});
     const [shown, setShown] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         void (async () => {
             try {
-                const { fields: f } = await send({ kind: 'reveal-entry', entryId: summary.id });
-                setFields(f);
+                const r = await send({ kind: 'reveal-entry', entryId: summary.id });
+                setFields(r.fields);
+                setHeld(r.held);
             } catch (err) {
                 onError(err instanceof Error ? err.message : 'could not open that entry');
             }
         })();
     }, [summary.id, onError]);
 
+    /** A held field's value, asked of the worker by name, once. */
+    const fetchHeld = async (name: string): Promise<string> => {
+        if (fetched[name] !== undefined) return fetched[name];
+        const { value } = await send({ kind: 'reveal-field', entryId: summary.id, field: name });
+        setFetched((f) => ({ ...f, [name]: value }));
+        return value;
+    };
+
     const rows = useMemo(() => {
         if (!fields) return [];
-        return Object.entries(fields).filter(([, v]) => typeof v === 'string' && v.length > 0) as [
-            string,
-            string,
-        ][];
-    }, [fields]);
+        const plain = Object.entries(fields).filter(
+            ([, v]) => typeof v === 'string' && v.length > 0
+        ) as [string, string][];
+        return [...plain, ...held.map((name) => [name, fetched[name] ?? null] as [string, null])];
+    }, [fields, held, fetched]);
 
     return (
         <div>
@@ -791,39 +793,34 @@ function EntryDetail({
                 <span className="entry-type">{summary.type}</span>
             </div>
             {!fields && <p className="muted">decrypting…</p>}
-            {fields &&
-                (summary.type === 'totp' ||
-                    (summary.type === 'password' &&
-                        typeof fields.totp === 'string' &&
-                        fields.totp.length > 0)) && (
-                    <TotpCodeView
-                        entryId={summary.id}
-                        clearSeconds={clearSeconds}
-                        onError={onError}
-                    />
-                )}
+            {fields && (summary.type === 'totp' || held.includes('totp')) && (
+                <TotpCodeView entryId={summary.id} clearSeconds={clearSeconds} onError={onError} />
+            )}
             <ul className="fields">
                 {rows.map(([name, value]) => {
-                    const secret = SECRET_FIELDS.has(name);
+                    const secret = SECRET_FIELDS.has(name) || held.includes(name);
                     const reveal = !secret || shown.has(name);
                     return (
                         <li key={name} className="field">
                             <span className="field-name">{name}</span>
                             <span className="field-value">
-                                {reveal ? value : '•'.repeat(Math.min(value.length, 12))}
+                                {reveal && value !== null
+                                    ? value
+                                    : '•'.repeat(Math.min(value?.length ?? 12, 12))}
                             </span>
                             <div className="field-actions">
                                 {secret && (
                                     <button
                                         className="copy"
-                                        onClick={() =>
+                                        onClick={async () => {
+                                            if (!reveal && value === null) await fetchHeld(name);
                                             setShown((s) => {
                                                 const next = new Set(s);
                                                 if (next.has(name)) next.delete(name);
                                                 else next.add(name);
                                                 return next;
-                                            })
-                                        }
+                                            });
+                                        }}
                                     >
                                         {reveal ? 'hide' : 'show'}
                                     </button>
@@ -831,7 +828,8 @@ function EntryDetail({
                                 <button
                                     className="copy"
                                     onClick={async () => {
-                                        await copyWithClear(value, clearSeconds);
+                                        const v = value ?? (await fetchHeld(name));
+                                        await copyWithClear(v, clearSeconds);
                                         onError(null);
                                     }}
                                 >
