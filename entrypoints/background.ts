@@ -101,7 +101,11 @@ export default defineBackground(() => {
     }
 
     async function getSettings(): Promise<Settings> {
-        if (!settings) settings = await loadSettings();
+        if (!settings) {
+            const loaded = await loadSettings();
+            // A set-settings that landed while storage was read is newer: keep it.
+            if (!settings) settings = loaded;
+        }
         return settings;
     }
 
