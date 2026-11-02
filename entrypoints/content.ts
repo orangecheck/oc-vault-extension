@@ -427,7 +427,9 @@ export default defineContentScript({
                         save.textContent = info.mode === 'update' ? 'update' : 'save';
                         msg.textContent = /locked/i.test(String(err))
                             ? 'OC Vault is locked — unlock it (the popup is opening) to save this login.'
-                            : 'Could not save — try again.';
+                            : /no capture|nothing to save/i.test(String(err))
+                              ? 'This prompt timed out, so nothing was saved. Sign in to the site again to save this login.'
+                              : 'Could not save — try again.';
                     });
             });
             actions.append(dismiss, save);

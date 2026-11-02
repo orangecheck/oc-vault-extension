@@ -157,6 +157,13 @@ export default defineBackground(() => {
         else void browser.storage.session.remove(PENDING_SLOT);
     }
 
+    /** The pending capture while its window lasts. Past it, the capture is dropped
+     *  whether or not anything read it since, so it can never be saved late. */
+    function livePending(): PendingCapture | null {
+        if (pendingCapture && Date.now() - pendingCapture.at > CAPTURE_TTL_MS) setPending(null);
+        return pendingCapture;
+    }
+
     /** Drop the key and the decrypted index — the vault is locked again. */
     function lock(): VaultState {
         key = null;
@@ -189,7 +196,7 @@ export default defineBackground(() => {
      */
     async function commitCapture(): Promise<{ notice?: string }> {
         if (!key) throw new Error('vault is locked');
-        const pc = pendingCapture;
+        const pc = livePending();
         if (!pc) throw new Error('nothing to save');
         const now = new Date().toISOString();
         let notice: string | undefined;
@@ -474,7 +481,8 @@ export default defineBackground(() => {
     /** A page may save or dismiss only a capture made on its own site. */
     function assertCaptureFor(caller: Caller): void {
         if (caller.kind === 'extension') return;
-        if (!pendingCapture || matchEntryToPage(pendingCapture.url, caller.url) === 'none') {
+        const pc = livePending();
+        if (!pc || matchEntryToPage(pc.url, caller.url) === 'none') {
             throw new NotAllowed('no capture for this page');
         }
     }
@@ -678,25 +686,19 @@ export default defineBackground(() => {
             }
 
             case 'get-pending-capture': {
-                if (!pendingCapture) return { pending: null };
-                if (Date.now() - pendingCapture.at > CAPTURE_TTL_MS) {
-                    setPending(null);
-                    return { pending: null };
-                }
+                const pc = livePending();
+                if (!pc) return { pending: null };
                 // A content script (pageUrl given) sees the pending capture
                 // only on the same registrable domain as the login; the
                 // popup (no pageUrl — trusted) sees it unconditionally.
-                if (
-                    message.pageUrl &&
-                    matchEntryToPage(pendingCapture.url, message.pageUrl) === 'none'
-                ) {
+                if (message.pageUrl && matchEntryToPage(pc.url, message.pageUrl) === 'none') {
                     return { pending: null };
                 }
                 return {
                     pending: {
-                        mode: pendingCapture.mode,
-                        host: pendingCapture.host,
-                        username: pendingCapture.username,
+                        mode: pc.mode,
+                        host: pc.host,
+                        username: pc.username,
                     },
                 };
             }
