@@ -61,6 +61,9 @@ const IDLE_ALARM = 'oc-idle-lock';
 /** The only fields a fill may carry into a page. A login's TOTP seed is never one. */
 const FILLABLE: ReadonlySet<string> = new Set(['username', 'password']);
 const CAPTURE_TTL_MS = 2 * 60_000;
+/** Why a save stopped and locked: the held key is no longer the vault's escrowed key. */
+const KEY_MOVED =
+    'OC Vault locked without saving: another device changed this login in a way it cannot read, so your vault key or passphrase may have changed there. Unlock again to save it.';
 /** storage.session slot for the pending capture — RAM-only, survives a
  *  worker restart so a save prompt is not lost (SECURITY.md §3). */
 const PENDING_SLOT = 'oc-pending-capture';
@@ -178,7 +181,11 @@ export default defineBackground(() => {
      * is never written back under its old id: the change is saved as a new
      * entry, and `notice` says so. A copy there that this extension cannot
      * read (sealed under another key, or damaged) is never written over
-     * either: the change is saved beside it. The person's edit is never lost.
+     * either: the change is saved beside it, but only while the held key still
+     * comes from the vault's escrow. If the escrow moved (the vault was opened
+     * elsewhere with a new key, or the passphrase changed), anything sealed
+     * now might never open on the web: the vault locks, the capture is kept
+     * for the next unlock, and nothing is saved. The person's edit is never lost.
      */
     async function commitCapture(): Promise<{ notice?: string }> {
         if (!key) throw new Error('vault is locked');
@@ -227,6 +234,19 @@ export default defineBackground(() => {
                         entries = entries.map((e) => (e.id === held.id ? held : e));
                         revs.set(held.id, current.updated_at);
                     }
+                }
+            }
+            if (unreadable) {
+                const escrow = await fetchEscrow();
+                if (!escrow || escrowFingerprint(escrow) !== keyEscrow) {
+                    lock();
+                    setPending(pc);
+                    try {
+                        await browser.action.openPopup();
+                    } catch {
+                        // The popup shows the kept capture whenever it next opens.
+                    }
+                    throw new Error(KEY_MOVED);
                 }
             }
             if (!written) {
