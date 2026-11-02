@@ -240,7 +240,8 @@ export default defineBackground(() => {
                 const escrow = await fetchEscrow();
                 if (!escrow || escrowFingerprint(escrow) !== keyEscrow) {
                     lock();
-                    setPending(pc);
+                    // Its window runs from now: the person has to unlock first.
+                    setPending({ ...pc, at: Date.now() });
                     try {
                         await browser.action.openPopup();
                     } catch {
