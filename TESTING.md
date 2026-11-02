@@ -68,6 +68,12 @@ OrangeCheck session cookie; a fresh/empty Chrome profile has no session.
    submit the login, a **"Save this login?"** prompt appears bottom-right.
    Click **save** → open `vault.ochk.io` and confirm the new entry is
    there.
+   **Update after a delete elsewhere.** Log in to a saved site with a new
+   password, but before you click **update**, Delete forever that entry at
+   `vault.ochk.io`. Click **update** → the prompt says the login was
+   deleted on another device and your change was saved as a new entry.
+   At `vault.ochk.io` the deleted entry stays gone and a new one holds the
+   new password.
 9. **Lock.** Click **lock** in the popup. Re-open it → the unlock gate
    shows. (It also auto-locks after the idle timeout from step 5.)
 10. **Generate.** Click **generate** (top of the popup; it works locked or

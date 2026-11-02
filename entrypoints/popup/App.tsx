@@ -86,6 +86,8 @@ export function App() {
     const [query, setQuery] = useState('');
     const [typeFilter, setTypeFilter] = useState<VaultEntryType | null>(null);
     const [error, setError] = useState<string | null>(null);
+    /** A save that went through, but not as asked: an entry deleted elsewhere saved as new. */
+    const [saveNotice, setSaveNotice] = useState<string | null>(null);
     const [busy, setBusy] = useState(false);
     const [syncing, setSyncing] = useState(false);
     const [confirmingLock, setConfirmingLock] = useState(false);
@@ -311,6 +313,14 @@ export function App() {
                 </div>
             }
         >
+            {saveNotice && (
+                <div className="notice" role="status">
+                    <p>{saveNotice}</p>
+                    <button className="btn" onClick={() => setSaveNotice(null)}>
+                        ok
+                    </button>
+                </div>
+            )}
             {pending && (
                 <div className="capture-banner">
                     <p>
@@ -323,8 +333,9 @@ export function App() {
                             className="btn"
                             onClick={async () => {
                                 try {
-                                    await send({ kind: 'commit-capture' });
+                                    const { notice } = await send({ kind: 'commit-capture' });
                                     setPending(null);
+                                    setSaveNotice(notice ?? null);
                                     void refresh();
                                 } catch (err) {
                                     setError(err instanceof Error ? err.message : 'could not save');

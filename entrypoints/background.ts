@@ -50,8 +50,10 @@ import {
     fetchEscrow,
     fetchIdentity,
     listBlobs,
+    BlobConflict,
     NotSignedIn,
     putBlob,
+    readBlob,
 } from '@/lib/sync';
 import { loadSettings, saveSettings, type Settings } from '@/lib/settings';
 
@@ -84,6 +86,8 @@ export default defineBackground(() => {
     /** Which escrowed wrap `key` came from; a passkey made now is bound to it. */
     let keyEscrow: string | null = null;
     let entries: VaultEntry[] = [];
+    /** The server revision each entry was read at: an update is written only over it. */
+    let revs = new Map<string, string>();
     let lastSyncAt: string | null = null;
     let settings: Settings | null = null;
     let pendingCapture: PendingCapture | null = null;
@@ -156,6 +160,7 @@ export default defineBackground(() => {
         keyEscrow = null;
         void browser.storage.session.remove(KEY_ESCROW_SLOT);
         entries = [];
+        revs = new Map();
         lastSyncAt = null;
         setPending(null);
         void clearSessionKey();
@@ -165,23 +170,74 @@ export default defineBackground(() => {
 
     /* ── capture (PLAN.md §6) ───────────────────────────────────────────── */
 
-    /** Write the held pending capture to the vault as a new / updated entry. */
-    async function commitCapture(): Promise<void> {
+    /**
+     * Write the held pending capture to the vault as a new / updated entry.
+     * An update is written only over the revision this extension read. If
+     * another device wrote the entry since, the change is put on what it holds
+     * now, once. If the entry was deleted there (purged, in Trash or gone), it
+     * is never written back under its old id: the change is saved as a new
+     * entry, and `notice` says so. The person's edit is never lost.
+     */
+    async function commitCapture(): Promise<{ notice?: string }> {
         if (!key) throw new Error('vault is locked');
         const pc = pendingCapture;
         if (!pc) throw new Error('nothing to save');
         const now = new Date().toISOString();
+        let notice: string | undefined;
 
         if (pc.mode === 'update' && pc.entryId) {
             const existing = entries.find((e) => e.id === pc.entryId);
             if (!existing) throw new Error('the entry to update is gone — sync and retry');
-            const fields = decryptFields(existing, key);
-            fields.password = pc.password;
-            if (pc.username) fields.username = pc.username;
-            const sealed = encryptFields(fields, key);
-            const updated: VaultEntry = { ...existing, ...sealed, updated_at: now };
-            await putBlob(updated.id, packEntryForCloud(updated, key));
-            entries = entries.map((e) => (e.id === updated.id ? updated : e));
+            const withChange = (base: VaultEntry): VaultEntry => {
+                const fields = decryptFields(base, key!);
+                fields.password = pc.password;
+                if (pc.username) fields.username = pc.username;
+                return { ...base, ...encryptFields(fields, key!), updated_at: now };
+            };
+            let base = existing;
+            let rev = revs.get(existing.id);
+            let written = false;
+            let deleted = false;
+            for (let attempt = 0; attempt < 2 && !written && !deleted; attempt++) {
+                const updated = withChange(base);
+                try {
+                    const next = await putBlob(updated.id, packEntryForCloud(updated, key), rev);
+                    entries = entries.map((e) => (e.id === updated.id ? updated : e));
+                    if (next) revs.set(updated.id, next);
+                    written = true;
+                } catch (err) {
+                    if (!(err instanceof BlobConflict)) throw err;
+                    // Written on another device since: read what it holds now.
+                    const current = await readBlob(existing.id);
+                    const held = current ? unpackEntryFromCloud(current.ciphertext, key) : null;
+                    if (!current || !held || !isLiveEntry(held)) {
+                        deleted = true;
+                    } else {
+                        base = held;
+                        rev = current.updated_at;
+                        entries = entries.map((e) => (e.id === held.id ? held : e));
+                        revs.set(held.id, current.updated_at);
+                    }
+                }
+            }
+            if (!written) {
+                const copy: VaultEntry = {
+                    ...withChange(existing),
+                    id: generateEntryId(),
+                    name: deleted ? existing.name : `${existing.name} (conflict copy)`,
+                    created_at: now,
+                };
+                const next = await putBlob(copy.id, packEntryForCloud(copy, key));
+                if (deleted) {
+                    entries = entries.filter((e) => e.id !== existing.id);
+                    revs.delete(existing.id);
+                }
+                entries = [...entries, copy];
+                if (next) revs.set(copy.id, next);
+                notice = deleted
+                    ? 'This login was deleted on another device, so your change was saved as a new entry.'
+                    : 'This login changed on another device, so your change was saved as a separate copy.';
+            }
         } else {
             const id = generateEntryId();
             const fields: VaultEntryFields = {
@@ -198,16 +254,22 @@ export default defineBackground(() => {
                 created_at: now,
                 updated_at: now,
             };
-            await putBlob(id, packEntryForCloud(entry, key));
+            const next = await putBlob(id, packEntryForCloud(entry, key));
             entries = [...entries, entry];
+            if (next) revs.set(id, next);
         }
         setPending(null);
+        return notice ? { notice } : {};
     }
 
     /* ── sync ───────────────────────────────────────────────────────────── */
 
-    /** Decrypt a set of cached/fetched blobs into the live entry index. */
+    /**
+     * Decrypt a set of cached/fetched blobs into the live entry index, and
+     * note the revision each was read at.
+     */
     function indexFromBlobs(blobs: CachedBlob[]): VaultEntry[] {
+        revs = new Map(blobs.map((b) => [b.envelope_id, b.updated_at]));
         if (!key) return [];
         const next: VaultEntry[] = [];
         for (const blob of blobs) {
@@ -621,8 +683,7 @@ export default defineBackground(() => {
                     }
                     throw new Error('locked');
                 }
-                await commitCapture();
-                return { saved: true };
+                return { saved: true, ...(await commitCapture()) };
 
             case 'dismiss-capture':
                 assertCaptureFor(caller);

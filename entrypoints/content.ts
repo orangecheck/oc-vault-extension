@@ -412,7 +412,17 @@ export default defineContentScript({
             save.addEventListener('click', () => {
                 save.textContent = 'saving…';
                 void send({ kind: 'commit-capture' })
-                    .then(() => closePrompt())
+                    .then(({ notice }) => {
+                        if (!notice) return closePrompt();
+                        // Saved, but not as asked: say so before the prompt goes.
+                        msg.textContent = notice;
+                        const ok = document.createElement('button');
+                        ok.type = 'button';
+                        ok.className = 'act act-primary';
+                        ok.textContent = 'ok';
+                        ok.addEventListener('click', () => closePrompt());
+                        actions.replaceChildren(ok);
+                    })
                     .catch((err: unknown) => {
                         save.textContent = info.mode === 'update' ? 'update' : 'save';
                         msg.textContent = /locked/i.test(String(err))

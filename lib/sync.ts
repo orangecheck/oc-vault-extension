@@ -131,10 +131,59 @@ export async function fetchBlobs(refs: BlobRef[], concurrency = 8): Promise<Fetc
     return out;
 }
 
-/** Upsert one blob's packed ciphertext. Used by capture (Phase 3). */
-export async function putBlob(envelopeId: string, ciphertext: string): Promise<void> {
-    await api(`/api/blobs/${encodeURIComponent(envelopeId)}`, {
-        method: 'PUT',
-        body: JSON.stringify({ ciphertext }),
-    });
+/**
+ * The server refused a revision-checked write (409): the entry was written on
+ * another device since this extension read it (`rev_moved`), or it is no
+ * longer there (`gone`).
+ */
+export class BlobConflict extends Error {
+    readonly reason: 'rev_moved' | 'gone';
+    constructor(reason: 'rev_moved' | 'gone') {
+        super(reason);
+        this.name = 'BlobConflict';
+        this.reason = reason;
+    }
+}
+
+/**
+ * Write one blob's packed ciphertext and return the server's new revision.
+ * With `ifRev` (an update of an entry this extension read) it lands only over
+ * that revision, else it throws `BlobConflict`; without it, it is a new entry.
+ */
+export async function putBlob(
+    envelopeId: string,
+    ciphertext: string,
+    ifRev?: string
+): Promise<string | undefined> {
+    const q = ifRev ? `?if_rev=${encodeURIComponent(ifRev)}` : '';
+    try {
+        const { updated_at } = await api<{ updated_at?: string }>(
+            `/api/blobs/${encodeURIComponent(envelopeId)}${q}`,
+            { method: 'PUT', body: JSON.stringify({ ciphertext }) }
+        );
+        return updated_at;
+    } catch (err) {
+        if (
+            ifRev &&
+            err instanceof Error &&
+            (err.message === 'rev_moved' || err.message === 'gone')
+        ) {
+            throw new BlobConflict(err.message);
+        }
+        throw err;
+    }
+}
+
+/** One blob as the server holds it now, or null when it has none. Any other failure throws. */
+export async function readBlob(
+    envelopeId: string
+): Promise<{ ciphertext: string; updated_at: string } | null> {
+    try {
+        return await api<{ ciphertext: string; updated_at: string }>(
+            `/api/blobs/${encodeURIComponent(envelopeId)}`
+        );
+    } catch (err) {
+        if (err instanceof Error && err.message === 'not_found') return null;
+        throw err;
+    }
 }

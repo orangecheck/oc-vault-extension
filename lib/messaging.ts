@@ -115,7 +115,8 @@ export interface ReplyData {
     'fill-values': { values: Record<string, string> };
     'capture-login': { decision: 'none' | 'new' | 'update'; host: string; username: string };
     'get-pending-capture': { pending: PendingCaptureInfo | null };
-    'commit-capture': { saved: boolean };
+    /** `notice`: what the person should know, such as an entry deleted elsewhere saved as new. */
+    'commit-capture': { saved: boolean; notice?: string };
     'dismiss-capture': Record<string, never>;
     'passkey-status': { enrolled: boolean; target: PasskeyTarget | null };
     'passkey-enroll': { enrolled: true };
