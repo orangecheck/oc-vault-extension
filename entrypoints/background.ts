@@ -176,7 +176,9 @@ export default defineBackground(() => {
      * another device wrote the entry since, the change is put on what it holds
      * now, once. If the entry was deleted there (purged, in Trash or gone), it
      * is never written back under its old id: the change is saved as a new
-     * entry, and `notice` says so. The person's edit is never lost.
+     * entry, and `notice` says so. A copy there that this extension cannot
+     * read (sealed under another key, or damaged) is never written over
+     * either: the change is saved beside it. The person's edit is never lost.
      */
     async function commitCapture(): Promise<{ notice?: string }> {
         if (!key) throw new Error('vault is locked');
@@ -198,7 +200,8 @@ export default defineBackground(() => {
             let rev = revs.get(existing.id);
             let written = false;
             let deleted = false;
-            for (let attempt = 0; attempt < 2 && !written && !deleted; attempt++) {
+            let unreadable = false;
+            for (let attempt = 0; attempt < 2 && !written && !deleted && !unreadable; attempt++) {
                 const updated = withChange(base);
                 try {
                     const next = await putBlob(updated.id, packEntryForCloud(updated, key), rev);
@@ -209,7 +212,13 @@ export default defineBackground(() => {
                     if (!(err instanceof BlobConflict)) throw err;
                     // Written on another device since: read what it holds now.
                     const current = await readBlob(existing.id);
-                    const held = current ? unpackEntryFromCloud(current.ciphertext, key) : null;
+                    let held: VaultEntry | null;
+                    try {
+                        held = current ? unpackEntryFromCloud(current.ciphertext, key) : null;
+                    } catch {
+                        unreadable = true;
+                        continue;
+                    }
                     if (!current || !held || !isLiveEntry(held)) {
                         deleted = true;
                     } else {
@@ -228,7 +237,7 @@ export default defineBackground(() => {
                     created_at: now,
                 };
                 const next = await putBlob(copy.id, packEntryForCloud(copy, key));
-                if (deleted) {
+                if (deleted || unreadable) {
                     entries = entries.filter((e) => e.id !== existing.id);
                     revs.delete(existing.id);
                 }
@@ -236,7 +245,9 @@ export default defineBackground(() => {
                 if (next) revs.set(copy.id, next);
                 notice = deleted
                     ? 'This login was deleted on another device, so your change was saved as a new entry.'
-                    : 'This login changed on another device, so your change was saved as a separate copy.';
+                    : unreadable
+                      ? 'This login was changed on another device, and this extension cannot read that version, so your change was saved as a separate copy.'
+                      : 'This login changed on another device, so your change was saved as a separate copy.';
             }
         } else {
             const id = generateEntryId();
