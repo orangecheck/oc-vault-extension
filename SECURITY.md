@@ -91,13 +91,14 @@ security check is one you have to remember to fix twice, and
 - Compare by **registrable domain (eTLD+1)**, with an **exact-origin** match
   preferred and surfaced first.
 - **The suffix set is NOT the full Public Suffix List.** This document said it
-  was; it is a compact 66-entry table of known multi-label suffixes, and the
-  module says so in its own header. The failure mode is deliberate and
+  was; it is a compact 65-entry table of known multi-label suffixes
+  (vault-core's `MULTI_LABEL_SUFFIXES`), and the module says so in its own
+  header. The failure mode is deliberate and
   one-directional: an _unrecognised_ multi-part suffix falls back to
   exact-host matching, which can only ever be stricter, never looser. So an
-  unknown suffix costs a convenience match, never a wrong offer. Swapping in
-  a real PSL (`tldts`) is a Phase 2 item and a prerequisite for shipping
-  autofill.
+  unknown suffix costs a convenience match, never a wrong offer. Autofill
+  shipped on this compact table; swapping in a real PSL (`tldts`) is still
+  an open item.
 - **Scheme matters:** an `https` entry is never offered on `http`.
 - **No path matching, no subdomain wildcards, no fuzzy/Levenshtein
   matching, no user-editable allowlist of "equivalent" domains** in v1.
@@ -188,5 +189,7 @@ simply has no matching entry. Phishing resistance is structural.
 
 ## 7. Reporting
 
-Until a formal channel exists, security issues go to the OrangeCheck
-contact path at `ochk.io`. Do not open public issues for vulnerabilities.
+Email **security@ochk.io** with a clear description, reproduction steps,
+impact assessment, and whether you want credit. We aim to reply to every
+report within 30 days. We can't promise a time to a fix yet. Do not open
+public issues for vulnerabilities.

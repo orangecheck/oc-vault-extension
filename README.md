@@ -29,8 +29,11 @@ oc-vault product's design:
 - **No silent action.** Nothing is filled, saved, or revealed without an
   explicit user gesture. The extension never auto-submits a form.
 - **Least privilege.** The shipped manifest requests the _minimum_
-  permissions for the features that are actually live. Autofill host
-  permissions arrive only with the autofill phase.
+  permissions for the features that are actually live: `storage` and
+  `alarms`, and host access to `vault.ochk.io` and `ochk.io` only. Autofill
+  runs as a content script on every page (`matches: ['<all_urls>']` in
+  `entrypoints/content.ts`), which detects login forms and fills only on a
+  user gesture.
 - **Minimal surface.** No analytics, no telemetry, no remote code. The
   build is reproducible; the source is auditable.
 
@@ -39,19 +42,23 @@ that govern where the vault key and plaintext are allowed to exist.
 
 ## Status
 
-**Phases 0–3 done — feature-complete (`v0.1.0`).** Unlock, sync, browse,
-autofill, and capture all work; build is green for Chrome and Firefox.
-Remaining before a `1.0`: Phase 4 polish + store submission — see
-[`PLAN.md`](./PLAN.md) for the plan and [`PUBLISHING.md`](./PUBLISHING.md)
-for the release path.
+**Version `0.1.1` on main.** Phases 0–3 are done: unlock, sync, browse,
+autofill, and capture all work, and the build is green for Chrome and
+Firefox. Phase 4 has shipped passkey unlock (Chromium), the password
+generator, live TOTP codes in the popup and the autofill picker; the rest of
+it is in [`PLAN.md`](./PLAN.md). Firefox Add-ons lists `0.1.0` (read 2026-11-03);
+the next store submission is in [`PUBLISHING.md`](./PUBLISHING.md).
 
 ## Stack
 
 - **WXT** — the build framework for cross-browser MV3 extensions (Vite
   under the hood; the extension-domain equivalent of the family's Next.js).
 - **React + TypeScript** for the popup UI; the family voice, dark by default.
+- **`@orangecheck/vault-core`** — origin matching (the autofill trust
+  check) and TOTP, the same code oc-vault-web runs.
 - **`@orangecheck/lock-crypto` + `@noble/hashes`** — the exact crypto
-  primitives oc-vault-web uses. No bespoke cryptography.
+  primitives oc-vault-web uses, for the key unwrap and entry decryption in
+  `lib/crypto.ts`. No bespoke cryptography.
 
 ## Develop
 
@@ -77,7 +84,6 @@ lib/
   crypto.ts         key unwrap + entry decryption (mirrors oc-vault-web)
   sync.ts           the vault.ochk.io /api/blobs client
   messaging.ts      typed message bus between worker / popup / content
-  origin.ts         origin matching — the autofill trust check
   forms.ts          login-form heuristics (Phase 2)
   passkey.ts        passkey unlock: the PRF ceremonies and the key seal (Phase 4)
   password-gen.ts   the password / passphrase generator (Phase 4)
@@ -92,7 +98,8 @@ Store and Firefox Add-ons rather than Vercel. It depends on `oc-vault-web`
 only through the public `vault.ochk.io` API and the shared
 `@orangecheck/*` npm packages — never an in-tree reference.
 
-The crypto read path is currently re-implemented here against the same
-formats oc-vault-web uses. Drift between the two is a correctness hazard;
-`PLAN.md` tracks extracting the shared read/write path into an
-`@orangecheck/vault-core` package so both consume one implementation.
+Origin matching and TOTP come from `@orangecheck/vault-core`. The key
+unwrap and entry decryption are still re-implemented in `lib/crypto.ts`
+against the formats oc-vault-web uses. Drift between the two is a
+correctness hazard; `PLAN.md` tracks moving that path onto vault-core too,
+so both consume one implementation.
