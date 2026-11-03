@@ -5,8 +5,9 @@ import { defineConfig } from 'wxt';
  *
  * Permissions are the minimum for what ships: `storage` for the ciphertext
  * cache + settings, `alarms` for the idle lock, and host access to the vault
- * API and the auth host only. Autofill needs no extra permission: it is a
- * content script declared on `<all_urls>` in entrypoints/content.ts.
+ * API and the auth host only. Autofill adds no permission key, but it is a
+ * content script declared on `<all_urls>` in entrypoints/content.ts, and that
+ * match is itself access to every page the user opens.
  */
 export default defineConfig({
     modules: ['@wxt-dev/module-react'],
