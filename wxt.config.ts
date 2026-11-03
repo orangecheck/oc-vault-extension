@@ -3,10 +3,10 @@ import { defineConfig } from 'wxt';
 /**
  * WXT configuration — see PLAN.md §2 (actors) and §8 (permissions).
  *
- * Permissions are deliberately at the Phase 0–1 minimum: `storage` for the
- * ciphertext cache + settings, and host access to the vault API and the
- * auth host only. The autofill phase adds `scripting` / `activeTab` and
- * `<all_urls>` — not before.
+ * Permissions are the minimum for what ships: `storage` for the ciphertext
+ * cache + settings, `alarms` for the idle lock, and host access to the vault
+ * API and the auth host only. Autofill needs no extra permission: it is a
+ * content script declared on `<all_urls>` in entrypoints/content.ts.
  */
 export default defineConfig({
     modules: ['@wxt-dev/module-react'],
