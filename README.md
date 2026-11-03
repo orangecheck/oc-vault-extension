@@ -45,7 +45,7 @@ that govern where the vault key and plaintext are allowed to exist.
 **Version `0.1.1` on main.** Phases 0–3 are done: unlock, sync, browse,
 autofill, and capture all work, and the build is green for Chrome and
 Firefox. Phase 4 has shipped passkey unlock (Chromium), the password
-generator, live TOTP codes in the popup and the autofill picker; the rest of
+generator, the autofill picker, and live TOTP codes in the popup; the rest of
 it is in [`PLAN.md`](./PLAN.md). Firefox Add-ons lists `0.1.0` (read 2026-11-03);
 the next store submission is in [`PUBLISHING.md`](./PUBLISHING.md).
 
@@ -55,7 +55,7 @@ the next store submission is in [`PUBLISHING.md`](./PUBLISHING.md).
   under the hood; the extension-domain equivalent of the family's Next.js).
 - **React + TypeScript** for the popup UI; the family voice, dark by default.
 - **`@orangecheck/vault-core`** — origin matching (the autofill trust
-  check) and TOTP, the same code oc-vault-web runs.
+  check) and TOTP; the TOTP is the same code oc-vault-web runs.
 - **`@orangecheck/lock-crypto` + `@noble/hashes`** — the exact crypto
   primitives oc-vault-web uses, for the key unwrap and entry decryption in
   `lib/crypto.ts`. No bespoke cryptography.
