@@ -4,7 +4,6 @@ import ReactDOM from 'react-dom/client';
 import { followColorScheme } from '@/lib/theme';
 import { App } from './App';
 import '@/assets/app.css';
-import './style.css';
 
 followColorScheme();
 

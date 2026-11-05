@@ -1,4 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from 'react';
+
+import { Mark } from '@orangecheck/app-design/brand';
+import {
+    Badge,
+    Button,
+    cn,
+    DensityProvider,
+    Input,
+    Label,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+    Slider,
+    Spinner,
+    Switch,
+} from '@orangecheck/app-design/primitives';
 
 import type { VaultEntryFields, VaultEntrySummary, VaultEntryType } from '@/lib/crypto';
 import { copyRequest } from '@/lib/copy';
@@ -182,7 +200,7 @@ export function App() {
     if (!state) {
         return (
             <Shell>
-                <p className="muted">{error ?? 'connecting to your vault…'}</p>
+                <p className={muted}>{error ?? 'Connecting to your vault…'}</p>
             </Shell>
         );
     }
@@ -199,10 +217,12 @@ export function App() {
     if (state.status === 'signed-out') {
         return (
             <Shell header={<GenerateLink onClick={() => setView('generate')} />}>
-                <p className="muted">Sign in with your orangecheck account to open your vault.</p>
-                <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
-                    sign in at ochk.io
-                </a>
+                <p className={muted}>Sign in with your orangecheck account to open your vault.</p>
+                <Button asChild>
+                    <a href={SIGNIN_URL} target="_blank" rel="noreferrer">
+                        Sign in at ochk.io
+                    </a>
+                </Button>
             </Shell>
         );
     }
@@ -264,7 +284,7 @@ export function App() {
                         }
                     }}
                 />
-                {error && <p className="error">{error}</p>}
+                {error && <p className={errorText}>{error}</p>}
             </Shell>
         );
     }
@@ -280,9 +300,9 @@ export function App() {
                         onError={setError}
                     />
                 ) : (
-                    <p className="muted">entry not found</p>
+                    <p className={muted}>Entry not found.</p>
                 )}
-                {error && <p className="error">{error}</p>}
+                {error && <p className={errorText}>{error}</p>}
             </Shell>
         );
     }
@@ -290,47 +310,50 @@ export function App() {
     return (
         <Shell
             header={
-                <div className="topbar-actions">
-                    {syncing && <span className="syncing">syncing…</span>}
-                    <GenerateLink onClick={() => setView('generate')} />
-                    <button className="link" onClick={() => setView('settings')}>
-                        settings
-                    </button>
-                    {confirmingLock ? (
-                        <>
-                            <button className="link danger" onClick={() => void doLock()}>
-                                lock?
-                            </button>
-                            <button className="link" onClick={() => setConfirmingLock(false)}>
-                                cancel
-                            </button>
-                        </>
-                    ) : (
-                        <button className="link" onClick={() => setConfirmingLock(true)}>
-                            lock
-                        </button>
-                    )}
-                </div>
+                confirmingLock ? (
+                    <>
+                        <Button variant="danger" size="sm" onClick={() => void doLock()}>
+                            Lock now
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmingLock(false)}>
+                            Cancel
+                        </Button>
+                    </>
+                ) : (
+                    <>
+                        {syncing && (
+                            <span role="status" className="px-1 text-muted-foreground">
+                                <Spinner className="size-4" />
+                                <span className="sr-only">Syncing</span>
+                            </span>
+                        )}
+                        <GenerateLink onClick={() => setView('generate')} />
+                        <HeaderButton onClick={() => setView('settings')}>Settings</HeaderButton>
+                        <HeaderButton onClick={() => setConfirmingLock(true)}>Lock</HeaderButton>
+                    </>
+                )
             }
         >
             {saveNotice && (
-                <div className="notice" role="status">
-                    <p>{saveNotice}</p>
-                    <button className="btn" onClick={() => setSaveNotice(null)}>
-                        ok
-                    </button>
+                <div className={panel} role="status">
+                    <p className="text-sm">{saveNotice}</p>
+                    <div>
+                        <Button size="sm" onClick={() => setSaveNotice(null)}>
+                            OK
+                        </Button>
+                    </div>
                 </div>
             )}
             {pending && (
-                <div className="capture-banner">
-                    <p>
+                <div className={cn(panel, 'border-l-2 border-l-primary')}>
+                    <p className="text-sm">
                         {pending.mode === 'update' ? 'Update' : 'Save'} the login for{' '}
-                        <strong>{pending.host}</strong>
+                        <strong className="font-medium text-oca-accent-ink">{pending.host}</strong>
                         {pending.username ? ` · ${pending.username}` : ''}?
                     </p>
-                    <div className="capture-actions">
-                        <button
-                            className="btn"
+                    <div className="flex items-center gap-2">
+                        <Button
+                            size="sm"
                             onClick={async () => {
                                 try {
                                     const { notice } = await send({ kind: 'commit-capture' });
@@ -342,17 +365,18 @@ export function App() {
                                 }
                             }}
                         >
-                            {pending.mode === 'update' ? 'update' : 'save'}
-                        </button>
-                        <button
-                            className="link"
+                            {pending.mode === 'update' ? 'Update' : 'Save'}
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={async () => {
                                 await send({ kind: 'dismiss-capture' }).catch(() => undefined);
                                 setPending(null);
                             }}
                         >
-                            dismiss
-                        </button>
+                            Dismiss
+                        </Button>
                     </div>
                 </div>
             )}
@@ -363,15 +387,16 @@ export function App() {
                     }
                 />
             )}
-            <input
-                className="search"
+            <Input
+                type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder={`search ${state.entryCount} entries`}
+                placeholder={`Search ${state.entryCount} entries`}
+                aria-label="Search entries"
                 autoFocus
             />
             {types.length > 1 && (
-                <div className="chips">
+                <div className="flex flex-wrap gap-1.5">
                     <Chip label="all" active={!typeFilter} onClick={() => setTypeFilter(null)} />
                     {types.map((t) => (
                         <Chip
@@ -383,39 +408,43 @@ export function App() {
                     ))}
                 </div>
             )}
-            {error && entries.length > 0 && <p className="error">{error}</p>}
-            <ul className="entries">
+            {error && entries.length > 0 && <p className={errorText}>{error}</p>}
+            <ul className="-mx-1 flex max-h-[360px] flex-col overflow-y-auto">
                 {filtered.map((entry) => (
-                    <li
-                        key={entry.id}
-                        className="entry entry-clickable"
-                        onClick={() => {
-                            setDetailId(entry.id);
-                            setView('detail');
-                            setError(null);
-                        }}
-                    >
-                        <div className="entry-main">
-                            <span className="entry-name">
+                    <li key={entry.id} className="flex items-center gap-2 border-b border-border">
+                        <button
+                            type="button"
+                            className="flex min-w-0 flex-1 flex-col gap-1 px-1 py-2.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                            onClick={() => {
+                                setDetailId(entry.id);
+                                setView('detail');
+                                setError(null);
+                            }}
+                        >
+                            <span className="truncate text-sm font-medium">
                                 {entry.favorite ? '★ ' : ''}
                                 {entry.name}
                             </span>
-                            <span className="entry-type">
+                            <span className={cn(label, 'flex items-center gap-1.5')}>
                                 {entry.type}
                                 {entry.folder ? (
-                                    <span className="entry-folder">{entry.folder}</span>
+                                    <span className="max-w-[120px] truncate border border-border px-1.5 normal-case tracking-normal">
+                                        {entry.folder}
+                                    </span>
                                 ) : null}
                             </span>
-                        </div>
-                        <button
-                            className="copy"
+                        </button>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="mr-1 px-3"
                             title={
                                 entry.type === 'totp'
                                     ? 'copy the current code'
                                     : 'copy the primary value'
                             }
-                            onClick={async (e) => {
-                                e.stopPropagation();
+                            aria-label={`Copy ${entry.name}`}
+                            onClick={async () => {
                                 try {
                                     // A TOTP entry copies its current code, never its secret.
                                     const ask = copyRequest(entry.type);
@@ -437,35 +466,43 @@ export function App() {
                                 }
                             }}
                         >
-                            copy
-                        </button>
+                            Copy
+                        </Button>
                     </li>
                 ))}
                 {filtered.length === 0 && entries.length > 0 && (
-                    <li className="muted">no entries match your search</li>
+                    <li className={cn(muted, 'px-1 py-2.5')}>No entries match your search.</li>
                 )}
             </ul>
             {entries.length === 0 && !syncing && (
-                <div className="empty">
+                <div className="flex flex-col gap-2">
                     {state.identity && (
-                        <p className="muted">
-                            signed in as <strong>{shortDid(state.identity)}</strong>
+                        <p className={muted}>
+                            Signed in as{' '}
+                            <strong className="font-mono font-normal text-foreground">
+                                {shortDid(state.identity)}
+                            </strong>
                         </p>
                     )}
-                    {error && <p className="error">vault.ochk.io: {error}</p>}
-                    <p className="muted">
+                    {error && <p className={errorText}>vault.ochk.io: {error}</p>}
+                    <p className={muted}>
                         This account has no entries the extension can load. Autofill reads your{' '}
-                        <strong>cloud-synced</strong> vault — if your secrets are under a different
-                        orangecheck account, sign in as that one; if cloud sync isn&apos;t on for
-                        this account, enable it at vault.ochk.io.
+                        <strong className="font-medium text-foreground">cloud-synced</strong> vault
+                        — if your secrets are under a different orangecheck account, sign in as that
+                        one; if cloud sync isn&apos;t on for this account, enable it at
+                        vault.ochk.io.
                     </p>
-                    <a className="btn" href={SIGNIN_URL} target="_blank" rel="noreferrer">
-                        switch identity at ochk.io
-                    </a>
+                    <Button asChild>
+                        <a href={SIGNIN_URL} target="_blank" rel="noreferrer">
+                            Switch identity at ochk.io
+                        </a>
+                    </Button>
                 </div>
             )}
             {entries.length > 0 && state.identity && (
-                <p className="who-line">signed in · {shortDid(state.identity)}</p>
+                <p className={cn(label, 'break-all normal-case tracking-normal')}>
+                    Signed in · {shortDid(state.identity)}
+                </p>
             )}
         </Shell>
     );
@@ -484,60 +521,84 @@ function browserSettingsUrl(): string {
  */
 function BrowserPmNotice({ onDismiss }: { onDismiss: () => void }) {
     return (
-        <div className="notice">
-            <p>
-                <strong>Seeing two autofill menus?</strong> Your browser has its own password
-                manager. Turn it off — in Settings → Autofill / Passwords, switch off “offer to save
-                passwords” — so only OC Vault offers to fill.
+        <div className={panel}>
+            <p className={muted}>
+                <strong className="font-medium text-foreground">Seeing two autofill menus?</strong>{' '}
+                Your browser has its own password manager. Turn it off — in Settings → Autofill /
+                Passwords, switch off “offer to save passwords” — so only OC Vault offers to fill.
             </p>
-            <div className="capture-actions">
-                <button
-                    className="btn"
+            <div className="flex items-center gap-2">
+                <Button
+                    size="sm"
                     onClick={() => void browser.tabs.create({ url: browserSettingsUrl() })}
                 >
-                    open browser settings
-                </button>
-                <button className="link" onClick={onDismiss}>
-                    got it
-                </button>
+                    Open browser settings
+                </Button>
+                <Button variant="ghost" size="sm" onClick={onDismiss}>
+                    Got it
+                </Button>
             </div>
         </div>
     );
 }
 
-function Shell({ header, children }: { header?: React.ReactNode; children: React.ReactNode }) {
+/** Muted body copy, the error line, a mono label, and a bordered panel: the popup's four voices. */
+const muted = 'text-[0.8125rem] leading-relaxed text-muted-foreground';
+const errorText = 'text-[0.8125rem] text-destructive';
+const label = 'oca-label text-[0.6875rem]';
+const panel = 'flex flex-col gap-2.5 border border-border bg-card p-3';
+
+function Shell({ header, children }: { header?: ReactNode; children: ReactNode }) {
     return (
-        <div className="popup">
-            <div className="topbar">
-                <a
-                    className="brand"
-                    href={VAULT_DASHBOARD}
-                    target="_blank"
-                    rel="noreferrer"
-                    title="open vault.ochk.io"
-                >
-                    oc <strong>vault</strong>
-                </a>
-                {header}
+        <DensityProvider density="compact">
+            <div className="flex min-h-[200px] w-[360px] flex-col bg-background text-foreground">
+                <div className="flex h-12 items-center justify-between gap-2 border-b border-border pl-4 pr-2">
+                    <a
+                        className="inline-flex items-center gap-2 text-[0.9375rem] font-medium tracking-[-0.01em] text-foreground"
+                        href={VAULT_DASHBOARD}
+                        target="_blank"
+                        rel="noreferrer"
+                        title="open vault.ochk.io"
+                    >
+                        <Mark size={20} />
+                        <span>
+                            <span className="sr-only">OC </span>vault
+                        </span>
+                    </a>
+                    <div className="flex items-center gap-0.5">{header}</div>
+                </div>
+                <div className="flex flex-col gap-3 p-4">{children}</div>
             </div>
-            <div className="body">{children}</div>
-        </div>
+        </DensityProvider>
+    );
+}
+
+/** A header action: quiet, with the text a person reads. */
+function HeaderButton({
+    onClick,
+    title,
+    children,
+}: {
+    onClick: () => void;
+    title?: string;
+    children: ReactNode;
+}) {
+    return (
+        <Button variant="ghost" size="sm" className="px-2.5" title={title} onClick={onClick}>
+            {children}
+        </Button>
     );
 }
 
 function BackButton({ onBack }: { onBack: () => void }) {
-    return (
-        <button className="link" onClick={onBack}>
-            ← back
-        </button>
-    );
+    return <HeaderButton onClick={onBack}>← Back</HeaderButton>;
 }
 
 function GenerateLink({ onClick }: { onClick: () => void }) {
     return (
-        <button className="link" onClick={onClick} title="make a strong password">
-            generate
-        </button>
+        <HeaderButton onClick={onClick} title="make a strong password">
+            Generate
+        </HeaderButton>
     );
 }
 
@@ -603,20 +664,17 @@ function GeneratorView({ clearSeconds }: { clearSeconds: number }) {
     );
     const flag = (
         key: 'lowercase' | 'uppercase' | 'digits' | 'symbols' | 'excludeAmbiguous',
-        label: string
+        text: string
     ) => (
-        <div className="setting">
-            <span>{label}</span>
-            <Toggle
-                on={opts[key]}
-                label={label}
-                onClick={() => update({ ...opts, [key]: !opts[key] })}
-            />
-        </div>
+        <SettingSwitch
+            label={text}
+            checked={opts[key]}
+            onChange={() => update({ ...opts, [key]: !opts[key] })}
+        />
     );
     return (
-        <div className="generator">
-            <div className="chips">
+        <div className="flex flex-col gap-3">
+            <div className="flex gap-1.5">
                 <Chip
                     label="password"
                     active={opts.mode === 'password'}
@@ -628,47 +686,48 @@ function GeneratorView({ clearSeconds }: { clearSeconds: number }) {
                     onClick={() => update({ ...opts, mode: 'passphrase' })}
                 />
             </div>
-            <output className="gen-value" aria-live="polite">
+            <output
+                className="block select-all break-all border border-border bg-card px-3 py-2.5 font-mono text-[0.9375rem] leading-snug"
+                aria-live="polite"
+            >
                 {value || '—'}
             </output>
             {value ? (
-                <p className="muted gen-strength">
+                <p className={cn(muted, '-mt-1.5')}>
                     about {bits} bits ·{' '}
                     {opts.mode === 'password'
                         ? `${value.length} characters`
                         : `${opts.words} words`}
                 </p>
             ) : (
-                <p className="error">Turn on at least one kind of character.</p>
+                <p className={errorText}>Turn on at least one kind of character.</p>
             )}
-            <div className="gen-actions">
-                <button
-                    className="btn"
+            <div className="flex items-center gap-2">
+                <Button
+                    size="sm"
                     disabled={!value}
                     onClick={async () => {
                         await copyWithClear(value, clearSeconds);
                         setCopied(true);
                     }}
                 >
-                    {copied ? 'copied' : 'copy'}
-                </button>
-                <button className="link" disabled={!value} onClick={() => update(opts)}>
-                    new
-                </button>
+                    {copied ? 'Copied' : 'Copy'}
+                </Button>
+                <Button variant="ghost" size="sm" disabled={!value} onClick={() => update(opts)}>
+                    New
+                </Button>
             </div>
             {opts.mode === 'password' ? (
-                <div className="settings">
-                    <div className="setting">
-                        <span>length {opts.length}</span>
-                        <input
-                            type="range"
-                            min={8}
-                            max={64}
-                            value={opts.length}
-                            aria-label="length"
-                            onChange={(e) => update({ ...opts, length: Number(e.target.value) })}
-                        />
-                    </div>
+                <div className="flex flex-col gap-3">
+                    <SettingSlider
+                        label={`length ${opts.length}`}
+                        name="length"
+                        min={8}
+                        max={64}
+                        value={opts.length}
+                        valueText={(v) => `${v} characters`}
+                        onChange={(length) => update({ ...opts, length })}
+                    />
                     {flag('lowercase', 'a–z')}
                     {flag('uppercase', 'A–Z')}
                     {flag('digits', '0–9')}
@@ -676,50 +735,35 @@ function GeneratorView({ clearSeconds }: { clearSeconds: number }) {
                     {flag('excludeAmbiguous', 'leave out look-alikes (0 O o 1 l I)')}
                 </div>
             ) : (
-                <div className="settings">
-                    <div className="setting">
-                        <span>words {opts.words}</span>
-                        <input
-                            type="range"
-                            min={3}
-                            max={10}
-                            value={opts.words}
-                            aria-label="words"
-                            onChange={(e) => update({ ...opts, words: Number(e.target.value) })}
-                        />
-                    </div>
-                    <div className="setting">
-                        <span>between words</span>
-                        <select
-                            value={opts.separator}
-                            onChange={(e) => update({ ...opts, separator: e.target.value })}
-                        >
-                            {SEPARATORS.map((s) => (
-                                <option key={s.label} value={s.value}>
-                                    {s.label}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="setting">
-                        <span>capitalize</span>
-                        <Toggle
-                            on={opts.capitalize}
-                            label="capitalize"
-                            onClick={() => update({ ...opts, capitalize: !opts.capitalize })}
-                        />
-                    </div>
-                    <div className="setting">
-                        <span>add a number</span>
-                        <Toggle
-                            on={opts.includeNumber}
-                            label="add a number"
-                            onClick={() => update({ ...opts, includeNumber: !opts.includeNumber })}
-                        />
-                    </div>
+                <div className="flex flex-col gap-3">
+                    <SettingSlider
+                        label={`words ${opts.words}`}
+                        name="words"
+                        min={3}
+                        max={10}
+                        value={opts.words}
+                        valueText={(v) => `${v} words`}
+                        onChange={(words) => update({ ...opts, words })}
+                    />
+                    <SettingSelect
+                        label="between words"
+                        value={opts.separator}
+                        options={SEPARATORS}
+                        onChange={(separator) => update({ ...opts, separator })}
+                    />
+                    <SettingSwitch
+                        label="capitalize"
+                        checked={opts.capitalize}
+                        onChange={() => update({ ...opts, capitalize: !opts.capitalize })}
+                    />
+                    <SettingSwitch
+                        label="add a number"
+                        checked={opts.includeNumber}
+                        onChange={() => update({ ...opts, includeNumber: !opts.includeNumber })}
+                    />
                 </div>
             )}
-            <p className="muted">
+            <p className={muted}>
                 Made in this browser from its secure random source. Nothing is saved or sent;
                 {clearSeconds > 0
                     ? ` a copy clears from the clipboard after ${clearSeconds}s while this popup stays open.`
@@ -729,26 +773,136 @@ function GeneratorView({ clearSeconds }: { clearSeconds: number }) {
     );
 }
 
-function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+/** A filter or a mode: a mono label, pressed or not. */
+function Chip({
+    label: text,
+    active,
+    onClick,
+}: {
+    label: string;
+    active: boolean;
+    onClick: () => void;
+}) {
     return (
-        <button className={active ? 'chip chip-active' : 'chip'} onClick={onClick}>
-            {label}
+        <button
+            type="button"
+            aria-pressed={active}
+            onClick={onClick}
+            className={cn(
+                'inline-flex h-7 items-center border px-2.5 font-mono text-[0.6875rem] uppercase tracking-[0.08em] outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring',
+                active
+                    ? 'border-foreground bg-foreground text-background'
+                    : 'border-border text-muted-foreground hover:border-foreground hover:text-foreground'
+            )}
+        >
+            {text}
         </button>
     );
 }
 
-function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label?: string }) {
+/** One setting: its words on the left, its control on the right. */
+function SettingRow({
+    id,
+    label: text,
+    children,
+}: {
+    id: string;
+    label: string;
+    children: ReactNode;
+}) {
     return (
-        <button
-            type="button"
-            role="switch"
-            aria-checked={on}
-            aria-label={label}
-            className={on ? 'toggle toggle-on' : 'toggle'}
-            onClick={onClick}
-        >
-            {on ? 'on' : 'off'}
-        </button>
+        <div className="flex items-center justify-between gap-3">
+            <Label htmlFor={id} className="font-normal leading-snug">
+                {text}
+            </Label>
+            {children}
+        </div>
+    );
+}
+
+function SettingSwitch({
+    label: text,
+    checked,
+    onChange,
+}: {
+    label: string;
+    checked: boolean;
+    onChange: () => void;
+}) {
+    const id = useId();
+    return (
+        <SettingRow id={id} label={text}>
+            <Switch id={id} checked={checked} onCheckedChange={onChange} />
+        </SettingRow>
+    );
+}
+
+function SettingSelect<T extends string | number>({
+    label: text,
+    value,
+    options,
+    onChange,
+}: {
+    label: string;
+    value: T;
+    options: { value: T; label: string }[];
+    onChange: (value: T) => void;
+}) {
+    const id = useId();
+    return (
+        <SettingRow id={id} label={text}>
+            <Select
+                value={String(value)}
+                onValueChange={(v) => {
+                    const picked = options.find((o) => String(o.value) === v);
+                    if (picked) onChange(picked.value);
+                }}
+            >
+                <SelectTrigger id={id} className="w-[132px] shrink-0">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    {options.map((o) => (
+                        <SelectItem key={o.label} value={String(o.value)}>
+                            {o.label}
+                        </SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+        </SettingRow>
+    );
+}
+
+function SettingSlider({
+    label: text,
+    name,
+    min,
+    max,
+    value,
+    valueText,
+    onChange,
+}: {
+    label: string;
+    name: string;
+    min: number;
+    max: number;
+    value: number;
+    valueText: (value: number) => string;
+    onChange: (value: number) => void;
+}) {
+    return (
+        <div className="flex items-center justify-between gap-4">
+            <span className="text-sm">{text}</span>
+            <Slider
+                className="w-[150px]"
+                min={min}
+                max={max}
+                value={value}
+                aria-label={name}
+                valueText={valueText}
+                onValueChange={onChange}
+            />
+        </div>
     );
 }
 
@@ -797,31 +951,39 @@ function EntryDetail({
     }, [fields, held, fetched]);
 
     return (
-        <div>
-            <div className="detail-head">
-                <span className="entry-name">{summary.name}</span>
-                <span className="entry-type">{summary.type}</span>
+        <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1 border-b border-border pb-3">
+                <h1 className="oca-title-sm break-words">{summary.name}</h1>
+                <span className={label}>{summary.type}</span>
             </div>
-            {!fields && <p className="muted">decrypting…</p>}
+            {!fields && <p className={muted}>Decrypting…</p>}
             {fields && (summary.type === 'totp' || held.includes('totp')) && (
                 <TotpCodeView entryId={summary.id} clearSeconds={clearSeconds} onError={onError} />
             )}
-            <ul className="fields">
+            <ul className="flex flex-col">
                 {rows.map(([name, value]) => {
                     const secret = SECRET_FIELDS.has(name) || held.includes(name);
                     const reveal = !secret || shown.has(name);
                     return (
-                        <li key={name} className="field">
-                            <span className="field-name">{name}</span>
-                            <span className="field-value">
+                        <li
+                            key={name}
+                            className="flex items-center gap-2 border-b border-border py-2"
+                        >
+                            <span className={cn(label, 'w-[72px] shrink-0 break-words')}>
+                                {name}
+                            </span>
+                            <span className="min-w-0 flex-1 break-all font-mono text-[0.8125rem]">
                                 {reveal && value !== null
                                     ? value
                                     : '•'.repeat(Math.min(value?.length ?? 12, 12))}
                             </span>
-                            <div className="field-actions">
+                            <div className="flex shrink-0 gap-1">
                                 {secret && (
-                                    <button
-                                        className="copy"
+                                    <Button
+                                        variant="secondary"
+                                        size="sm"
+                                        className="px-2.5"
+                                        aria-label={`${reveal ? 'Hide' : 'Show'} ${name}`}
                                         onClick={async () => {
                                             if (!reveal && value === null) await fetchHeld(name);
                                             setShown((s) => {
@@ -832,19 +994,22 @@ function EntryDetail({
                                             });
                                         }}
                                     >
-                                        {reveal ? 'hide' : 'show'}
-                                    </button>
+                                        {reveal ? 'Hide' : 'Show'}
+                                    </Button>
                                 )}
-                                <button
-                                    className="copy"
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="px-2.5"
+                                    aria-label={`Copy ${name}`}
                                     onClick={async () => {
                                         const v = value ?? (await fetchHeld(name));
                                         await copyWithClear(v, clearSeconds);
                                         onError(null);
                                     }}
                                 >
-                                    copy
-                                </button>
+                                    Copy
+                                </Button>
                             </div>
                         </li>
                     );
@@ -903,18 +1068,26 @@ function TotpCodeView({
         };
     }, [entryId]);
 
-    if (failed) return <p className="error">{failed}</p>;
+    if (failed) return <p className={errorText}>{failed}</p>;
     return (
-        <div className="totp">
-            <span className="field-name">code</span>
-            <output className="totp-code" aria-live="polite">
+        <div className="flex items-center gap-3 border border-border bg-card px-3 py-2.5">
+            <span className={label}>code</span>
+            <output
+                className="flex-1 font-mono text-[1.375rem] tracking-[0.08em] oca-tabular"
+                aria-live="polite"
+            >
                 {now ? groupCode(now.code) : '··· ···'}
             </output>
-            <span className="totp-left" title="seconds until the next code">
+            <span
+                className="oca-numeral min-w-[28px] text-right"
+                title="seconds until the next code"
+            >
                 {now ? `${left}s` : ''}
             </span>
-            <button
-                className="copy"
+            <Button
+                variant="secondary"
+                size="sm"
+                className="px-2.5"
                 disabled={!now}
                 onClick={async () => {
                     if (!now) return;
@@ -923,8 +1096,8 @@ function TotpCodeView({
                     onError(null);
                 }}
             >
-                {copied ? 'copied' : 'copy'}
-            </button>
+                {copied ? 'Copied' : 'Copy'}
+            </Button>
         </div>
     );
 }
@@ -944,107 +1117,98 @@ function SettingsView({
 }) {
     const [confirmingRemove, setConfirmingRemove] = useState(false);
     return (
-        <div className="settings">
+        <div className="flex flex-col gap-3.5">
             {isPasskeySupported() && (
-                <div className="setting">
-                    <span>unlock with a passkey</span>
+                <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm">Unlock with a passkey</span>
                     {passkey ? (
                         confirmingRemove ? (
-                            <span className="topbar-actions">
-                                <button
-                                    className="link danger"
+                            <span className="flex items-center gap-1">
+                                <Button
+                                    variant="danger"
+                                    size="sm"
+                                    className="px-3"
                                     onClick={() => {
                                         setConfirmingRemove(false);
                                         onPasskeyRemove();
                                     }}
                                 >
-                                    remove?
-                                </button>
-                                <button className="link" onClick={() => setConfirmingRemove(false)}>
-                                    cancel
-                                </button>
+                                    Remove
+                                </Button>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="px-3"
+                                    onClick={() => setConfirmingRemove(false)}
+                                >
+                                    Cancel
+                                </Button>
                             </span>
                         ) : (
-                            <span className="topbar-actions">
-                                <span className="passkey-on">on</span>
-                                <button className="link" onClick={() => setConfirmingRemove(true)}>
-                                    remove
-                                </button>
+                            <span className="flex items-center gap-2">
+                                <Badge tone="brand">on</Badge>
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="px-3"
+                                    onClick={() => setConfirmingRemove(true)}
+                                >
+                                    Remove
+                                </Button>
                             </span>
                         )
                     ) : (
-                        <button className="link" onClick={onPasskeySetUp}>
-                            set up
-                        </button>
+                        <Button
+                            variant="secondary"
+                            size="sm"
+                            className="px-3"
+                            onClick={onPasskeySetUp}
+                        >
+                            Set up
+                        </Button>
                     )}
                 </div>
             )}
-            <div className="setting">
-                <span>auto-lock when idle</span>
-                <select
-                    value={settings.idleLockMinutes}
-                    onChange={(e) =>
-                        onChange({ ...settings, idleLockMinutes: Number(e.target.value) })
-                    }
-                >
-                    {IDLE_LOCK_CHOICES.map((m) => (
-                        <option key={m} value={m}>
-                            {idleLabel(m)}
-                        </option>
-                    ))}
-                </select>
-            </div>
-            <div className="setting">
-                <span>offer to save new logins</span>
-                <Toggle
-                    on={settings.captureEnabled}
-                    onClick={() =>
-                        onChange({ ...settings, captureEnabled: !settings.captureEnabled })
-                    }
-                />
-            </div>
-            <div className="setting">
-                <span>offer autofill on login fields</span>
-                <Toggle
-                    on={settings.showFieldIcon}
-                    onClick={() =>
-                        onChange({ ...settings, showFieldIcon: !settings.showFieldIcon })
-                    }
-                />
-            </div>
-            <div className="setting">
-                <span>open the autofill menu on field focus</span>
-                <Toggle
-                    on={settings.autofillMenuOnFocus}
-                    onClick={() =>
-                        onChange({
-                            ...settings,
-                            autofillMenuOnFocus: !settings.autofillMenuOnFocus,
-                        })
-                    }
-                />
-            </div>
-            <div className="setting">
-                <span>clear the clipboard after copy</span>
-                <select
-                    value={settings.clipboardClearSeconds}
-                    onChange={(e) =>
-                        onChange({ ...settings, clipboardClearSeconds: Number(e.target.value) })
-                    }
-                >
-                    {CLIPBOARD_CLEAR_CHOICES.map((s) => (
-                        <option key={s} value={s}>
-                            {s === 0 ? 'never' : `${s}s`}
-                        </option>
-                    ))}
-                </select>
-            </div>
-            <p className="muted">
+            <SettingSelect
+                label="Auto-lock when idle"
+                value={settings.idleLockMinutes}
+                options={IDLE_LOCK_CHOICES.map((m) => ({ value: m, label: idleLabel(m) }))}
+                onChange={(idleLockMinutes) => onChange({ ...settings, idleLockMinutes })}
+            />
+            <SettingSwitch
+                label="Offer to save new logins"
+                checked={settings.captureEnabled}
+                onChange={() => onChange({ ...settings, captureEnabled: !settings.captureEnabled })}
+            />
+            <SettingSwitch
+                label="Offer autofill on login fields"
+                checked={settings.showFieldIcon}
+                onChange={() => onChange({ ...settings, showFieldIcon: !settings.showFieldIcon })}
+            />
+            <SettingSwitch
+                label="Open the autofill menu on field focus"
+                checked={settings.autofillMenuOnFocus}
+                onChange={() =>
+                    onChange({ ...settings, autofillMenuOnFocus: !settings.autofillMenuOnFocus })
+                }
+            />
+            <SettingSelect
+                label="Clear the clipboard after copy"
+                value={settings.clipboardClearSeconds}
+                options={CLIPBOARD_CLEAR_CHOICES.map((s) => ({
+                    value: s,
+                    label: s === 0 ? 'never' : `${s}s`,
+                }))}
+                onChange={(clipboardClearSeconds) =>
+                    onChange({ ...settings, clipboardClearSeconds })
+                }
+            />
+            <p className={muted}>
                 Turn the focus menu off if you keep your browser&apos;s built-in password manager —
                 OC Vault&apos;s menu then opens only when you click its mark, so the two never both
                 pop up.
             </p>
-            <p className="muted">
+            <p className={muted}>
                 The vault locks on the idle timer, when you lock it, and when the browser closes.
                 Its key is held in memory, never written to disk
                 {passkey ? ' — except sealed to your passkey, which only that passkey opens.' : '.'}
@@ -1075,47 +1239,50 @@ function UnlockGate({
     const [passphrase, setPassphrase] = useState('');
     return (
         <form
+            className="flex flex-col gap-3"
             onSubmit={(e) => {
                 e.preventDefault();
                 if (passphrase) onUnlock(passphrase);
             }}
         >
-            <p className="muted">
+            <p className={muted}>
                 Enter your vault passphrase. Being signed in lets the extension fetch your encrypted
                 vault; the passphrase decrypts it — orangecheck never can.
             </p>
-            {identity && <p className="who-line">unlocking · {shortDid(identity)}</p>}
-            {passkey && (
-                <button className="btn" type="button" onClick={onPasskey}>
-                    unlock with passkey
-                </button>
+            {identity && (
+                <p className={cn(label, 'break-all normal-case tracking-normal')}>
+                    Unlocking · {shortDid(identity)}
+                </p>
             )}
-            <input
-                className="search"
+            {passkey && (
+                <Button type="button" onClick={onPasskey}>
+                    Unlock with passkey
+                </Button>
+            )}
+            <Input
                 type="password"
                 value={passphrase}
                 onChange={(e) => setPassphrase(e.target.value)}
-                placeholder="vault passphrase"
+                placeholder="Vault passphrase"
+                aria-label="Vault passphrase"
                 autoComplete="current-password"
                 autoFocus
             />
-            {error && <p className="error">{error}</p>}
-            <button className="btn" type="submit" disabled={busy || !passphrase}>
-                {busy ? 'unlocking…' : 'unlock'}
-            </button>
-            <div className="setting setting-inline">
-                <span>stay unlocked for</span>
-                <select
-                    value={settings.idleLockMinutes}
-                    onChange={(e) => onIdleChange(Number(e.target.value))}
-                >
-                    {IDLE_LOCK_CHOICES.map((m) => (
-                        <option key={m} value={m}>
-                            {stayUnlockedLabel(m)}
-                        </option>
-                    ))}
-                </select>
-            </div>
+            {error && <p className={errorText}>{error}</p>}
+            <Button
+                type="submit"
+                variant={passkey ? 'secondary' : 'primary'}
+                loading={busy}
+                disabled={busy || !passphrase}
+            >
+                {busy ? 'Unlocking…' : 'Unlock'}
+            </Button>
+            <SettingSelect
+                label="Stay unlocked for"
+                value={settings.idleLockMinutes}
+                options={IDLE_LOCK_CHOICES.map((m) => ({ value: m, label: stayUnlockedLabel(m) }))}
+                onChange={onIdleChange}
+            />
         </form>
     );
 }
