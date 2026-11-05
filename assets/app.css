@@ -1,0 +1,9 @@
+/*
+ * The popup's and the passkey window's styles: the family's design system, app-design 2.x.
+ * Its rules apply under <html data-oc-app="ochk">, which both pages set; lib/theme.ts adds
+ * .dark when the browser is in dark mode. The fonts are app-design's own files, bundled.
+ */
+@import 'tailwindcss';
+@custom-variant dark (&:is(.dark *));
+@source '../node_modules/@orangecheck/app-design/dist';
+@import '@orangecheck/app-design/styles.css';

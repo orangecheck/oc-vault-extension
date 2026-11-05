@@ -1,3 +1,4 @@
+import tailwindcss from '@tailwindcss/vite';
 import { defineConfig } from 'wxt';
 
 /**
@@ -11,6 +12,9 @@ import { defineConfig } from 'wxt';
  */
 export default defineConfig({
     modules: ['@wxt-dev/module-react'],
+    // Tailwind 4 builds app-design's utilities into static CSS; nothing runs inline, so the
+    // extension pages keep script-src 'self'.
+    vite: () => ({ plugins: [tailwindcss()] }),
     manifest: {
         name: 'OC Vault',
         description:
