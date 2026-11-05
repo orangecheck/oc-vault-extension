@@ -48,17 +48,22 @@ function declare(tokens: Tokens): string {
         .join(' ');
 }
 
-/** The tokens on the shadow host, switched by the browser's mode. */
-const HOST = `
-    :host { ${declare(PICKER_TOKENS.light)} }
-    @media (prefers-color-scheme: dark) { :host { ${declare(PICKER_TOKENS.dark)} } }
+/**
+ * The tokens on the shadow tree's own top elements, switched by the browser's mode. Not on
+ * :host: the host is a plain div on someone else's page, and any page rule that matches it
+ * (`div { --popover: … }`, `body > div`) beats a :host rule, so the panel would take the
+ * page's values. No page rule reaches inside the shadow root.
+ */
+const TOKENS = `
+    .panel, .mark { ${declare(PICKER_TOKENS.light)} }
+    @media (prefers-color-scheme: dark) { .panel, .mark { ${declare(PICKER_TOKENS.dark)} } }
 `;
 
 const SANS = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
 const MONO = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
 /** The picker and the save prompt: a square panel, a mono label head, rows, actions. */
-export const PANEL_CSS = `${HOST}
+export const PANEL_CSS = `${TOKENS}
     .panel { font:13px/1.45 ${SANS}; background:var(--popover);
         color:var(--popover-foreground); border:1px solid var(--oca-hairline-strong);
         border-radius:0; width:280px; overflow:hidden;
@@ -95,7 +100,7 @@ export const PANEL_CSS = `${HOST}
 `;
 
 /** The field mark: the keyhole on a tint of the accent ink, square. */
-export const MARK_CSS = `${HOST}
+export const MARK_CSS = `${TOKENS}
     .mark { width:22px; height:22px; padding:0; border:none; border-radius:0;
         cursor:pointer; display:flex; align-items:center; justify-content:center;
         color:var(--oca-accent-ink);
