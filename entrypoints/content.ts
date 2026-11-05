@@ -15,8 +15,8 @@ import type { VaultEntrySummary } from '@/lib/crypto';
 import { detectLoginForms, type LoginForm } from '@/lib/forms';
 import { send } from '@/lib/messaging';
 import { afterMatches, afterState, onFailure, type PickerOutcome } from '@/lib/picker';
+import { MARK_CSS, PANEL_CSS } from '@/lib/picker-style';
 
-const ORANGE = '#ea580c';
 const Z = '2147483646';
 
 export default defineContentScript({
@@ -110,41 +110,13 @@ export default defineContentScript({
         function panel(root: ShadowRoot): HTMLElement {
             root.replaceChildren();
             const style = document.createElement('style');
-            style.textContent = `
-                .panel { font:12px ui-monospace,SFMono-Regular,Menlo,monospace;
-                    background:#141414; color:#e5e5e5; border:1px solid #2a2a2a;
-                    border-radius:8px; width:266px; overflow:hidden;
-                    box-shadow:0 12px 34px rgba(0,0,0,.6); }
-                .head { display:flex; align-items:center; gap:6px; padding:8px 11px;
-                    border-bottom:1px solid #2a2a2a; color:#8a8a8a; font-size:9.5px;
-                    letter-spacing:.16em; text-transform:uppercase; }
-                .head svg { display:block; }
-                .head strong { color:${ORANGE}; }
-                .msg { padding:11px; color:#9a9a9a; line-height:1.55; }
-                .who { padding:0 11px 10px; color:#e5e5e5; word-break:break-all; }
-                .row { display:flex; align-items:center; gap:9px; width:100%;
-                    text-align:left; cursor:pointer; background:none; border:none;
-                    border-bottom:1px solid #2a2a2a; color:#e5e5e5; font:inherit;
-                    padding:10px 11px; }
-                .row:last-child { border-bottom:none; }
-                .row:hover, .row:focus-visible { background:#1f1f1f; outline:none; }
-                .row .nm { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-                .row .t { margin-left:auto; color:#8a8a8a; font-size:9px;
-                    letter-spacing:.12em; text-transform:uppercase; flex-shrink:0; }
-                .actions { display:flex; gap:7px; padding:9px 11px;
-                    border-top:1px solid #2a2a2a; }
-                .act { flex:1; cursor:pointer; font:inherit; font-size:11px;
-                    padding:8px; border-radius:5px; border:1px solid #2a2a2a;
-                    background:none; color:#e5e5e5; }
-                .act:hover { border-color:${ORANGE}; }
-                .act-primary { background:${ORANGE}; color:#fff; border-color:${ORANGE}; }
-            `;
+            style.textContent = PANEL_CSS;
             root.append(style);
             const wrap = document.createElement('div');
             wrap.className = 'panel';
             const head = document.createElement('div');
             head.className = 'head';
-            head.append(markIcon(13, ORANGE));
+            head.append(markIcon(13, 'currentColor'));
             const brand = document.createElement('span');
             brand.append('oc ');
             const strong = document.createElement('strong');
@@ -204,7 +176,7 @@ export default defineContentScript({
             pickerAnchor = anchor;
 
             const p = panel(root);
-            const loading = auto ? null : panelMessage(p, 'checking your vault…');
+            const loading = auto ? null : panelMessage(p, 'Checking your vault…');
             const superseded = () => picker !== host;
             // lib/picker.ts decides; this only draws its answer.
             const show = (o: PickerOutcome): void => {
@@ -235,7 +207,7 @@ export default defineContentScript({
                 const row = document.createElement('button');
                 row.type = 'button';
                 row.className = 'row';
-                row.append(markIcon(13, ORANGE));
+                row.append(markIcon(13, 'currentColor'));
                 const nm = document.createElement('span');
                 nm.className = 'nm';
                 nm.textContent = entry.name;
@@ -260,16 +232,7 @@ export default defineContentScript({
             host.style.cssText = `position:fixed; z-index:${Z}; display:none;`;
             const root = host.attachShadow({ mode: 'closed' });
             const style = document.createElement('style');
-            style.textContent = `
-                .mark { width:22px; height:22px; padding:0; border:none;
-                    border-radius:5px; cursor:pointer; display:flex;
-                    align-items:center; justify-content:center; color:${ORANGE};
-                    background:rgba(234,88,12,.16);
-                    box-shadow:0 1px 3px rgba(0,0,0,.28);
-                    transition:background .12s, transform .12s; }
-                .mark:hover, .mark:focus-visible { background:rgba(234,88,12,.32);
-                    transform:scale(1.07); outline:none; }
-            `;
+            style.textContent = MARK_CSS;
             const btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'mark';
@@ -400,7 +363,7 @@ export default defineContentScript({
             const dismiss = document.createElement('button');
             dismiss.type = 'button';
             dismiss.className = 'act';
-            dismiss.textContent = 'not now';
+            dismiss.textContent = 'Not now';
             dismiss.addEventListener('click', () => {
                 void send({ kind: 'dismiss-capture' }).catch(() => undefined);
                 closePrompt();
@@ -408,9 +371,9 @@ export default defineContentScript({
             const save = document.createElement('button');
             save.type = 'button';
             save.className = 'act act-primary';
-            save.textContent = info.mode === 'update' ? 'update' : 'save';
+            save.textContent = info.mode === 'update' ? 'Update' : 'Save';
             save.addEventListener('click', () => {
-                save.textContent = 'saving…';
+                save.textContent = 'Saving…';
                 void send({ kind: 'commit-capture' })
                     .then(({ notice }) => {
                         if (!notice) return closePrompt();
@@ -419,12 +382,12 @@ export default defineContentScript({
                         const ok = document.createElement('button');
                         ok.type = 'button';
                         ok.className = 'act act-primary';
-                        ok.textContent = 'ok';
+                        ok.textContent = 'OK';
                         ok.addEventListener('click', () => closePrompt());
                         actions.replaceChildren(ok);
                     })
                     .catch((err: unknown) => {
-                        save.textContent = info.mode === 'update' ? 'update' : 'save';
+                        save.textContent = info.mode === 'update' ? 'Update' : 'Save';
                         msg.textContent = /locked/i.test(String(err))
                             ? 'OC Vault is locked — unlock it (the popup is opening) to save this login.'
                             : /no capture|nothing to save/i.test(String(err))
