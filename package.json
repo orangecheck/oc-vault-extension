@@ -30,7 +30,7 @@
         "@noble/hashes": "^1.5.0",
         "@orangecheck/app-design": "^2.0.1",
         "@orangecheck/lock-crypto": "^0.1.0",
-        "@orangecheck/vault-core": "0.4.0",
+        "@orangecheck/vault-core": "0.6.0",
         "lucide-react": "^0.544.0",
         "next-themes": "^0.4.6",
         "react": "19.1.0",
